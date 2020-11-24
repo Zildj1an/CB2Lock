@@ -12,7 +12,7 @@
 #include <pthread.h>
 #include <sched.h>
 
-#define NUM_THREADS (10)
+#define NUM_THREADS (8)
 #define errExit(msg) do { perror(msg); exit(EXIT_FAILURE); } while (0)
 
 pthread_mutex_t lock; 
@@ -20,6 +20,7 @@ pthread_mutex_t lock;
 void *thread_func(void *vargp) 
 {
 	/* TODO acquire the lock and etc. */
+	// TODO output time (nice format)
 	// pthread_mutex_lock(&lock); 
 	// pthread_mutex_unlock(&lock); 
 	return NULL;
@@ -30,7 +31,9 @@ int main(int argc, char *argv[])
 	pthread_t threads[NUM_THREADS];
 	pthread_attr_t thread_attr;
 	struct sched_param param;
-	int i = 0, priority1 = 20;
+	int i = 0, priority1 = 20, high_priority;
+
+	/* TODO get params of number of threads and the high prio */ 
 
 	if (argc != 1){
 		fprintf(stderr,"Incorrect number of arguments.\n");
@@ -57,6 +60,8 @@ int main(int argc, char *argv[])
 
 		/* Set the priority (TODO set different values) */
 		param.sched_priority = priority1;
+
+		// pthread_attr_setaffinity_np
 
 		if (pthread_attr_setschedparam(&thread_attr,&param) != 0){
 			errExit("setting sched params");
