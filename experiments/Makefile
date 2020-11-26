@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-lpthread -I.
+CFLAGS=-lpthread -I. -D_GNU_SOURCE
 
 all:
 	$(CC) test_prios.c -o test_prios $(CFLAGS)
