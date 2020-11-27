@@ -12,25 +12,36 @@
 #include <pthread.h>
 #include <sched.h>
 #include <sys/sysinfo.h>
+#include <sys/resource.h>
 #include <time.h>
 #include <errno.h>
+#include <linux/sched.h>
+#include <linux/kernel.h>
 
 #define errExit(msg) do { perror(msg); exit(EXIT_FAILURE); } while (0)
 
 struct test_run {
 	struct timespec tp;
+	/* Priority of the thread that attempts to acquire the lock */
+	int priority;
 };
 
 pthread_barrier_t barrier;
 pthread_mutex_t lock;
 
-void *thread_func(void *vargp) {
+void *thread_func(void *vargp) 
+{
 	struct test_run *tr = (struct test_run*)vargp;
 	struct timespec start;
 	int rc;
 
+	if (setpriority(PRIO_PROCESS,getpid(),tr->priority) == -1 ){
+		errExit("Error setting the thread priority");
+	}
+
 	/* Wait for all threads to start */
 	rc = pthread_barrier_wait(&barrier);
+
 	if (rc != PTHREAD_BARRIER_SERIAL_THREAD && rc != 0) {
 		errExit("pthread barrier error");
 	}
@@ -55,9 +66,9 @@ int main(int argc, char *argv[])
 	int i, opt, cpu = 0, ncpu = get_nprocs(), thread_count = ncpu, flags = 0;
 	pthread_t *threads;
 	pthread_attr_t thread_attr;
-	struct sched_param sparam;
 	struct test_run *tr;
 	cpu_set_t cpuset;
+	char set_root[] = "sudo -s";
 
 	while ((opt = getopt(argc, argv, "hn:f")) != -1) {
 		switch (opt) {
@@ -68,6 +79,10 @@ int main(int argc, char *argv[])
 				exit(EXIT_SUCCESS);
 			case 'n':
 				thread_count = atoi(optarg);
+				if (thread_count > get_nprocs() || thread_count <= 0){
+					fprintf(stderr, "Invalid number of threads!\n");
+					exit(EXIT_FAILURE);
+				}
 				break;
 			default:
 				fprintf(stderr, "Usage: %s [-n nthreads]\n", argv[0]);
@@ -75,92 +90,83 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (thread_count <= 0) {
-		errExit("invalid number of threads");
+	/* We will need to be root for nice values lower than 0 */
+	if (geteuid() != 0){
+  		fprintf(stderr,"We need root to change priorities!\n");
+		exit(EXIT_FAILURE);
 	}
 
-	threads = calloc(thread_count, sizeof(pthread_t));
-	if (threads == NULL) {
+	/* Allocate memory for the array of threads */
+	if (!(threads = calloc(thread_count, sizeof(pthread_t)))){
 		errExit("Could not calloc threads");
 	}
 
 	/* Initialize default attributes for a thread */
 	if (pthread_attr_init(&thread_attr) != 0){
-		errExit("default thread attributes init");
+		errExit("Default thread attributes init");
 	} 
 
 	if (pthread_attr_setinheritsched(&thread_attr, PTHREAD_EXPLICIT_SCHED) != 0) {
-		errExit("could not set explicit schedule");
+		errExit("Could not set explicit schedule");
 	}
 
-	if (pthread_attr_setschedpolicy(&thread_attr, SCHED_OTHER) != 0) {
-		errExit("could not set explicit schedule");
-	}
-
-	/* Retrieve the sched params from the thread attributes */
-	if (pthread_attr_getschedparam(&thread_attr, &sparam) != 0){
-		errExit("getting sched params");
+	/* Set the CFS scheduler (Most likely it already was) */
+	if (pthread_attr_setschedpolicy(&thread_attr, SCHED_NORMAL) != 0) {
+		errExit("Could not set the CFS scheduler");
 	}
 
 	/* Initialize mutex */
 	if (pthread_mutex_init(&lock, NULL) != 0) {
-		errExit("mutex init");
+		errExit("Mutex init");
 	}
 
 	/* Initialize barrier */
 	if (pthread_barrier_init(&barrier, NULL, thread_count) != 0) {
-		errExit("barrier init");
+		errExit("Barrier init");
 	}
 
 	/* Create the threads and assign their priorities. If we are oversubscribed,
 	 * priorities and cpu pinning will wrap around to match the niceness and
 	 * nproc of the machine. */
-	sparam.sched_priority = 0;
+
 	for (i = 0; i < thread_count; i++){
-
-		/* Set the priority */
-		sparam.sched_priority = 0;
-
-		if (pthread_attr_setschedparam(&thread_attr, &sparam) != 0) {
-			errExit("setting sched params");
-		}
 
 		/* Set processor affinity */
 		CPU_ZERO(&cpuset);
 		CPU_SET(cpu, &cpuset);
 		cpu = (cpu + 1) % ncpu;
-		if (pthread_attr_setaffinity_np(&thread_attr, sizeof(cpu_set_t), &cpuset) != 0) {
+
+		if (pthread_attr_setaffinity_np(&thread_attr,sizeof(cpu_set_t),&cpuset) != 0) {
 			errExit("Could not set thread affinity");
 		}
 
 		/* Make a results struct for this thread */
-		if ((tr = malloc(sizeof(struct test_run))) == NULL) {
+		if (!(tr = malloc(sizeof(struct test_run)))) {
 			errExit("Could not malloc test results struct for thread");
 		}
+
+		tr->priority = 5;
 
 		if (pthread_create(&threads[i], &thread_attr, thread_func, tr) != 0) {
 			errExit("Could not create thread");
 		}
 	}
 
-    	/* TODO: 
+	/* TODO: 
 	   - Force low-prio lock acquisition first. 
-	   - Force (or not?) same CPU-affinity to threads.
-	   - Measure and plot: Test different values (bash script?), etc. */
+	   - High and low prio threads must share core to try to trick CFS.
+	   - Measure and plot: Test different values, etc. 
+	*/
    
 	/* Join and process results */
 	for (i = 0; i < thread_count; ++i) {
+
 		if (pthread_join(threads[i], (void**)&tr) != 0) {
 			errExit("Could not join thread");
 		}
 
-		/* Process this thread's results */
-		if (pthread_attr_getschedparam(&thread_attr, &sparam) != 0){
-			errExit("getting sched params");
-		}
-
-		printf("Priority of thread %d: %d\t\ttime: %d;%d\n", i,
-				sparam.sched_priority, tr->tp.tv_sec, tr->tp.tv_nsec);
+		printf("Priority of thread %d: %d\t\t time: %d;%d\n", i,
+			     tr->priority, tr->tp.tv_sec, tr->tp.tv_nsec);
 		free(tr);
 	}
 
