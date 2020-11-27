@@ -103,7 +103,6 @@ int main(int argc, char *argv[])
 	 * priorities and cpu pinning will wrap around to match the niceness and
 	 * nproc of the machine. */
 	sparam.sched_priority = 0;
-	CPU_ZERO(&cpuset);
 	cpu = 0;
 	for (i = 0; i < thread_count; i++){
 
@@ -115,8 +114,9 @@ int main(int argc, char *argv[])
 		}
 
 		/* Set processor affinity */
+		CPU_ZERO(&cpuset);
 		CPU_SET(cpu, &cpuset);
-		cpu %= ncpu;
+		cpu = (cpu + 1) % ncpu;
 		if (pthread_attr_setaffinity_np(&thread_attr, sizeof(cpu_set_t), &cpuset) != 0) {
 			errExit("Could not set thread affinity");
 		}
