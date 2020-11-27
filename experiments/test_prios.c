@@ -55,6 +55,7 @@ try_again:
 
 	/* Force the first thread (the lowest prio if flags not set) to acquire first */
 	if (tr->id != 0 && !lowest_acquired){
+		asm("");
 		goto try_again;
 	}
 
