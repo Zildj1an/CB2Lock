@@ -18,22 +18,27 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 
+#define HIGHEST_PRIO (-20)
+#define LOWEST_PRIO   (19)
+
 #define errExit(msg) do { perror(msg); exit(EXIT_FAILURE); } while (0)
 
 struct test_run {
 	struct timespec tp;
 	/* Priority of the thread that attempts to acquire the lock */
 	int priority;
+	int id;
 };
 
 pthread_barrier_t barrier;
 pthread_mutex_t lock;
+int lowest_acquired = 0;
 
 void *thread_func(void *vargp) 
 {
 	struct test_run *tr = (struct test_run*)vargp;
 	struct timespec start;
-	int rc;
+	int rc, s = 0, m = 0;
 
 	if (setpriority(PRIO_PROCESS,getpid(),tr->priority) == -1 ){
 		errExit("Error setting the thread priority");
@@ -46,11 +51,27 @@ void *thread_func(void *vargp)
 		errExit("pthread barrier error");
 	}
 
+try_again:
+
+	/* Force the first thread (the lowest prio if flags not set) to acquire first */
+	if (tr->id != 0 && !lowest_acquired){
+		goto try_again;
+	}
+
 	/* Measure how long this thread has the lock */
 	pthread_mutex_lock(&lock);
+
+	/* ##########################  CRITICAL SECTION ######################### */
+
 	clock_gettime(CLOCK_MONOTONIC, &start);
 
-	/* CS */
+	/* If we set this for every thread regardless, we don't need an atomic flag */
+	lowest_acquired = 1;
+
+	/* Let's make the time gap more obvious */
+	for (; s < 100000; s++){
+		asm(""); /* Avoids GCC optimizations */
+	}
 
 	pthread_mutex_unlock(&lock);
 	clock_gettime(CLOCK_MONOTONIC, &tr->tp);
@@ -68,21 +89,23 @@ int main(int argc, char *argv[])
 	pthread_attr_t thread_attr;
 	struct test_run *tr;
 	cpu_set_t cpuset;
-	char set_root[] = "sudo -s";
 
 	while ((opt = getopt(argc, argv, "hn:f")) != -1) {
 		switch (opt) {
 			case 'h':
-				printf("Usage: %s [-n nthreads]\n");
+				printf("Usage: %s [-n nthreads]\n",argv[0]);
 				printf("\n");
 				printf("If -f flag is supplied, then all threads will have same priority\n");
 				exit(EXIT_SUCCESS);
 			case 'n':
 				thread_count = atoi(optarg);
-				if (thread_count > get_nprocs() || thread_count <= 0){
+				if (thread_count <= 0){
 					fprintf(stderr, "Invalid number of threads!\n");
 					exit(EXIT_FAILURE);
 				}
+				break;
+			case 'f':
+				flags = 1;
 				break;
 			default:
 				fprintf(stderr, "Usage: %s [-n nthreads]\n", argv[0]);
@@ -125,16 +148,14 @@ int main(int argc, char *argv[])
 		errExit("Barrier init");
 	}
 
-	/* Create the threads and assign their priorities. If we are oversubscribed,
-	 * priorities and cpu pinning will wrap around to match the niceness and
-	 * nproc of the machine. */
+	/* #### Create the threads and assign their priorities. ################# */
 
 	for (i = 0; i < thread_count; i++){
 
 		/* Set processor affinity */
 		CPU_ZERO(&cpuset);
 		CPU_SET(cpu, &cpuset);
-		cpu = (cpu + 1) % ncpu;
+		//cpu = (cpu + 1) % ncpu;
 
 		if (pthread_attr_setaffinity_np(&thread_attr,sizeof(cpu_set_t),&cpuset) != 0) {
 			errExit("Could not set thread affinity");
@@ -145,7 +166,13 @@ int main(int argc, char *argv[])
 			errExit("Could not malloc test results struct for thread");
 		}
 
-		tr->priority = 5;
+		tr->priority = LOWEST_PRIO;
+		tr->id = i;
+
+		/* All threads are the highest priority but one (If we didn't do -f) */
+		if (!flags && i > 0){
+			tr->priority = HIGHEST_PRIO;
+		}
 
 		if (pthread_create(&threads[i], &thread_attr, thread_func, tr) != 0) {
 			errExit("Could not create thread");
@@ -158,14 +185,15 @@ int main(int argc, char *argv[])
 	   - Measure and plot: Test different values, etc. 
 	*/
    
-	/* Join and process results */
+	/* ############ Join and process results ################################ */
+
 	for (i = 0; i < thread_count; ++i) {
 
 		if (pthread_join(threads[i], (void**)&tr) != 0) {
 			errExit("Could not join thread");
 		}
 
-		printf("Priority of thread %d: %d\t\t time: %d;%d\n", i,
+		printf("Priority of thread %d: %d\t\t time: %d:%d\n", i,
 			     tr->priority, tr->tp.tv_sec, tr->tp.tv_nsec);
 		free(tr);
 	}
@@ -179,4 +207,3 @@ int main(int argc, char *argv[])
 
 	exit(EXIT_SUCCESS);
 }
-
