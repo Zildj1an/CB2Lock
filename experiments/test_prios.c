@@ -21,11 +21,19 @@ struct test_run {
 	struct timespec tp;
 };
 
+pthread_barrier_t barrier;
 pthread_mutex_t lock;
 
 void *thread_func(void *vargp) {
 	struct test_run *tr = (struct test_run*)vargp;
 	struct timespec start;
+	int rc;
+
+	/* Wait for all threads to start */
+	rc = pthread_barrier_wait(&barrier);
+	if (rc != PTHREAD_BARRIER_SERIAL_THREAD && rc != 0) {
+		errExit("pthread barrier error");
+	}
 
 	/* Measure how long this thread has the lock */
 	pthread_mutex_lock(&lock);
@@ -44,7 +52,7 @@ void *thread_func(void *vargp) {
 
 int main(int argc, char *argv[])
 {
-	int i, opt, cpu, ncpu = get_nprocs(), thread_count = ncpu, flags = 0;
+	int i, opt, cpu = 0, ncpu = get_nprocs(), thread_count = ncpu, flags = 0;
 	pthread_t *threads;
 	pthread_attr_t thread_attr;
 	struct sched_param sparam;
@@ -54,7 +62,7 @@ int main(int argc, char *argv[])
 	while ((opt = getopt(argc, argv, "hn:f")) != -1) {
 		switch (opt) {
 			case 'h':
-				printf("Usage: %s [-n nthreads] [-f]\n");
+				printf("Usage: %s [-n nthreads]\n");
 				printf("\n");
 				printf("If -f flag is supplied, then all threads will have same priority\n");
 				exit(EXIT_SUCCESS);
@@ -62,7 +70,7 @@ int main(int argc, char *argv[])
 				thread_count = atoi(optarg);
 				break;
 			default:
-				fprintf(stderr, "Usage: %s [-n nthreads] [-f]\n", argv[0]);
+				fprintf(stderr, "Usage: %s [-n nthreads]\n", argv[0]);
 				exit(EXIT_FAILURE);
 		}
 	}
@@ -99,11 +107,15 @@ int main(int argc, char *argv[])
 		errExit("mutex init");
 	}
 
+	/* Initialize barrier */
+	if (pthread_barrier_init(&barrier, NULL, thread_count) != 0) {
+		errExit("barrier init");
+	}
+
 	/* Create the threads and assign their priorities. If we are oversubscribed,
 	 * priorities and cpu pinning will wrap around to match the niceness and
 	 * nproc of the machine. */
 	sparam.sched_priority = 0;
-	cpu = 0;
 	for (i = 0; i < thread_count; i++){
 
 		/* Set the priority */
@@ -154,6 +166,7 @@ int main(int argc, char *argv[])
 
 	/* Cleanup */
 	pthread_mutex_destroy(&lock); 
+	pthread_barrier_destroy(&barrier);
 
 	free(threads);
 	pthread_attr_destroy(&thread_attr);
