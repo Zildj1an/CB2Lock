@@ -70,7 +70,7 @@ try_again:
 	lowest_acquired = 1;
 
 	/* Let's make the time gap more obvious */
-	for (; s < 100000; s++){
+	for (; s < 1000000; s++){
 		asm(""); /* Avoids GCC optimizations */
 	}
 
@@ -180,12 +180,6 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	/* TODO: 
-	   - Force low-prio lock acquisition first. 
-	   - High and low prio threads must share core to try to trick CFS.
-	   - Measure and plot: Test different values, etc. 
-	*/
-   
 	/* ############ Join and process results ################################ */
 
 	for (i = 0; i < thread_count; ++i) {
