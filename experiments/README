@@ -1,0 +1,3 @@
+To run an experiment modify bench.sh and then do:
+
+./bench.sh | tee -a {log_file}
