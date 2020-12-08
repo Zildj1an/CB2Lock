@@ -6,12 +6,12 @@ echo "-----------------------------------------------"
 
 for m in {1..100}
 do
-	if [[ $m -eq $ITERATIONS ]]; then
-		break
-	fi
-
-	for i in {3..6}
+	for i in {1..100}
 	do
+		if [[ $i -lt $LOW_THREAD ]]; then
+			continue
+		fi
+
 		# Clean everything
 		make clean &> /dev/null
 		make &> /dev/null
@@ -22,7 +22,15 @@ do
 		# Run
 		./test_prios -n $i
 		./test_prios -n $i -f
+	
+		if [[ $i -eq $HIGH_THREAD ]]; then
+			break
+		fi
 	done
+
+	if [[ $m -eq $ITERATIONS ]]; then
+		break
+	fi
 
 	echo "-----------------------------------------------"
 done

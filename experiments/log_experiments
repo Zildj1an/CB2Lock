@@ -1,0 +1,60 @@
+-----------------------------------------------
+ LOG OF EXECUTION 12/08/20 12:07:36 PM 
+-----------------------------------------------
+-----------------------------------------------
+ LOG OF EXECUTION 12/08/20 12:08:19 PM 
+-----------------------------------------------
+
+Experiment with 4 threads, thread zero has the lowest priority.
+Thread 0:  Priority   19 CPU time:  0:001625087  CPU%: 24
+Thread 1:  Priority  -20 CPU time:  0:001723543  CPU%: 26
+Thread 2:  Priority  -20 CPU time:  0:001681180  CPU%: 25
+Thread 3:  Priority  -20 CPU time:  0:001509186  CPU%: 23
+Total clock time: 4:942771504
+Total threads CPU time: 0:006538996
+
+Experiment with 4 threads, all threads with same priority.
+Thread 0:  Priority   19 CPU time:  0:001632672  CPU%: 24
+Thread 1:  Priority   19 CPU time:  0:001720978  CPU%: 26
+Thread 2:  Priority   19 CPU time:  0:001692095  CPU%: 25
+Thread 3:  Priority   19 CPU time:  0:001532763  CPU%: 23
+Total clock time: 0:014889997
+Total threads CPU time: 0:006578508
+
+Experiment with 5 threads, thread zero has the lowest priority.
+Thread 0:  Priority   19 CPU time:  0:001481147  CPU%: 18
+Thread 1:  Priority  -20 CPU time:  0:001695904  CPU%: 21
+Thread 2:  Priority  -20 CPU time:  0:001704413  CPU%: 21
+Thread 3:  Priority  -20 CPU time:  0:001460081  CPU%: 18
+Thread 4:  Priority  -20 CPU time:  0:001567473  CPU%: 19
+Total clock time: 0:024225764
+Total threads CPU time: 0:007909018
+
+Experiment with 5 threads, all threads with same priority.
+Thread 0:  Priority   19 CPU time:  0:001699252  CPU%: 20
+Thread 1:  Priority   19 CPU time:  0:001548825  CPU%: 18
+Thread 2:  Priority   19 CPU time:  0:001595642  CPU%: 19
+Thread 3:  Priority   19 CPU time:  0:001754731  CPU%: 21
+Thread 4:  Priority   19 CPU time:  0:001720388  CPU%: 20
+Total clock time: 0:035813440
+Total threads CPU time: 0:008318838
+
+Experiment with 6 threads, thread zero has the lowest priority.
+Thread 0:  Priority   19 CPU time:  0:001552196  CPU%: 16
+Thread 1:  Priority  -20 CPU time:  0:001676399  CPU%: 17
+Thread 2:  Priority  -20 CPU time:  0:001405906  CPU%: 15
+Thread 3:  Priority  -20 CPU time:  0:001521367  CPU%: 16
+Thread 4:  Priority  -20 CPU time:  0:001482017  CPU%: 15
+Thread 5:  Priority  -20 CPU time:  0:001678002  CPU%: 18
+Total clock time: 0:047321216
+Total threads CPU time: 0:009315887
+
+Experiment with 6 threads, all threads with same priority.
+Thread 0:  Priority   19 CPU time:  0:001748567  CPU%: 18
+Thread 1:  Priority   19 CPU time:  0:001468916  CPU%: 15
+Thread 2:  Priority   19 CPU time:  0:001534468  CPU%: 16
+Thread 3:  Priority   19 CPU time:  0:001500026  CPU%: 16
+Thread 4:  Priority   19 CPU time:  0:001513045  CPU%: 16
+Thread 5:  Priority   19 CPU time:  0:001524162  CPU%: 16
+Total clock time: 0:047319984
+Total threads CPU time: 0:009289184

@@ -1,6 +1,5 @@
-To run the experiments n times from 3 to 6 threads on a single core do:
+To run the experiments n times from x to y threads do:
 
 ```
-ITERATIONS=n ./bench.sh | tee -a log_file
+ITERATIONS=n LOW_THREAD=x HIGH_THREAD=y ./bench.sh | tee -a log_file
 ```
-
