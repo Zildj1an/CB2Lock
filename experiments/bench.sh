@@ -4,19 +4,25 @@ echo "-----------------------------------------------"
 echo " LOG OF EXECUTION $(date +"%x %r") "
 echo "-----------------------------------------------"
 
-for i in {2..30}
+for m in {1..100}
 do
-	if [[ $i -lt $LOW_THREAD ]]; then
-		continue
-	fi
-	
-	./test_prios -n $i
-	./test_prios -n $i -f
-	
-	if [[ $i -eq $HIGH_THREAD ]]; then
+	if [[ $m -eq $ITERATIONS ]]; then
 		break
 	fi
 
-done
+	for i in {3..6}
+	do
+		# Clean everything
+		make clean &> /dev/null
+		make &> /dev/null
+		hash -r
+		sync
+		echo 3 > /proc/sys/vm/drop_caches 
 
-echo "-----------------------------------------------"
+		# Run
+		./test_prios -n $i
+		./test_prios -n $i -f
+	done
+
+	echo "-----------------------------------------------"
+done
