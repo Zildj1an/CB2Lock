@@ -147,7 +147,7 @@ int main(int argc, char *argv[])
 			case 'n':
 				thread_count = atoi(optarg);
 				if (thread_count <= 0){
-					fprintf(stderr, "Invalid number of threads!\n");
+					fprintf(stderr, "Invalid number of threads (%d)!\n",thread_count);
 					exit(EXIT_FAILURE);
 				}
 				break;

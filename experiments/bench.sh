@@ -4,10 +4,19 @@ echo "-----------------------------------------------"
 echo " LOG OF EXECUTION $(date +"%x %r") "
 echo "-----------------------------------------------"
 
-for i in {1..30}
+for i in {2..30}
 do
-	./test_prios -n $THREAD_COUNT
-	./test_prios -n $THREAD_COUNT -f
+	if [[ $i -lt $LOW_THREAD ]]; then
+		continue
+	fi
+	
+	./test_prios -n $i
+	./test_prios -n $i -f
+	
+	if [[ $i -eq $HIGH_THREAD ]]; then
+		break
+	fi
+
 done
 
 echo "-----------------------------------------------"

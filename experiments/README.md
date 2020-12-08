@@ -1,5 +1,5 @@
-To run an experiment with n threads do:
+To run the experiments from n to m threads do:
 
 ```
-THREAD_COUNT=n ./bench.sh | tee -a log<n>_file
+LOW_THREAD=n HIGH_THREAD=m ./bench.sh | tee -a log_file
 ```
