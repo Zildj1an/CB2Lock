@@ -256,10 +256,11 @@ int main(int argc, char *argv[])
 
 		tr = &collection_tr[i];
 
-		printf("Thread %d: Priority %s%d\t CPU time: %d:%09d\t CPU%: %d\n",
-		       i,(tr->priority > 0)?sp1:&sp2,
-		       tr->priority, tr->tp.tv_sec, 
-		       tr->tp.tv_nsec, compute_percentage(tr,total));
+		printf("Thread %d: Priority %s%d CPU time:  %d:%09d  CPU%: %d\n",
+		     	i,(tr->priority > 0)?sp1:&sp2,
+		  	tr->priority, tr->tp.tv_sec, 
+		       	tr->tp.tv_nsec, compute_percentage(tr,total));
+		
 	}
 
 	/* Compute total execution time */
