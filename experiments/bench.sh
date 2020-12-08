@@ -6,8 +6,8 @@ echo "-----------------------------------------------"
 
 for i in {1..30}
 do
-	./test_prios
-	./test_prios -f
+	./test_prios -n $THREAD_COUNT
+	./test_prios -n $THREAD_COUNT -f
 done
 
 echo "-----------------------------------------------"
