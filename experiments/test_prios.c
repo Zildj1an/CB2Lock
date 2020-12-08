@@ -202,6 +202,13 @@ int main(int argc, char *argv[])
 
 	clock_gettime(CLOCK_MONOTONIC, &start_bench);
 
+	printf("\nExperiment with %d threads,",thread_count);
+	
+	if (flags){
+		printf(" all threads with same priority.\n");
+	}
+	else printf(" thread zero has the lowest priority.\n");
+
 	for (i = 0; i < thread_count; i++){
 
 		/* Set processor affinity */
