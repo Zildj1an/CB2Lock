@@ -67,6 +67,7 @@ void init_lock(void)
 /* Control for forcing the scenario we want */
 pthread_barrier_t barrier;
 volatile int lowest_acquired = 0;
+volatile int highest_acquired = 0;
 
 /* Encapsulates per-thread test data */
 struct test_run {
@@ -85,7 +86,7 @@ void timeval_substract(struct timespec *result,
 		  struct timespec *y)
 {
 	int nsec;
-	unsigned long long nano = 1000000000; 
+	unsigned long long nano = 1000000000;
   	
 	if (x->tv_nsec < y->tv_nsec) {
     		nsec = (y->tv_nsec - x->tv_nsec) / nano + 1;
@@ -114,12 +115,15 @@ int compute_percentage(struct test_run *tr, long long int total)
 
 void bystander_stuff(void)
 {
-	// TODO -> We need to measure the time they got to use the CPU
-	// before the high priority thread acquired the lock
-	// so we can endlessly loop and break when the high prio acquires
-	// the lock.
-	// When the high prio acquires the lock he can simply leave the CS
-	// and we can finish. 
+	int s;
+
+	/* Loop until the highest priority thread acquires the lock */
+	while (!highest_acquired) {
+		/* Chill... */
+		for (s = 0; s < 100; s++){
+			asm(""); /* Avoids GCC optimizations */
+		}
+	}
 }
 
 void *thread_func(void *vargp) 
@@ -157,6 +161,11 @@ try_again:
 
 	/* Measure how long this thread has the lock */
 	pthread_mutex_lock(&lock);
+
+	/* Highest priority thread acquired the lock */
+	if (tr->id == 1) {
+		highest_acquired = 1;
+	}
 
 	/* #####################  CRITICAL SECTION ######################### */
 
@@ -201,7 +210,6 @@ int main(int argc, char *argv[])
 	struct timespec start_bench, end_bench, total_time, bench_time;
 	cpu_set_t cpuset;
         long long int total, nano = 1000000000;
-	char *sp1= "  ", sp2 = ' ';
 	time_t t;
 
 	if (ncpu < 2) {
@@ -357,9 +365,9 @@ int main(int argc, char *argv[])
 
 		tr = &collection_tr[i];
 
-		printf("Thread: %d\tPriority: %s%d\tCPU affinity: %d\tCPU time: %d:%09d\tCPU%: %d\n",
-				i,(tr->priority > 0)?sp1:&sp2, tr->priority, tr->pinning,
-				tr->tp.tv_sec, tr->tp.tv_nsec, compute_percentage(tr,total));
+		printf("Thread: %d\tPriority: %d\tCPU affinity: %d\tCPU time: %d:%09d\tCPU%: %d\n",
+				i, tr->priority, tr->pinning, tr->tp.tv_sec, tr->tp.tv_nsec,
+				compute_percentage(tr,total));
 	
 	}
 
