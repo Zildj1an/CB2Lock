@@ -27,13 +27,14 @@ struct test_run {
 	struct timespec tp;
 	/* Priority of the thread that attempts to acquire the lock */
 	int priority;
+	int pinning;
 	int id;
 };
 
 pthread_barrier_t barrier;
 int lowest_acquired = 0;
 
-pthread_spinlock_t spinlock;
+pthread_mutex_t lock;
 
 void timeval_substract(struct timespec *result, 
 		  struct timespec *x, 
@@ -75,6 +76,13 @@ void *thread_func(void *vargp)
 		errExit("pthread barrier error");
 	}
 
+	if (tr->id > 1) {
+		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
+
+		/* TODO: Some other nonsense for bystander threads */
+		goto out;
+	}
+
 try_again:
 
 	/* Force the first thread (the lowest prio if !flags) acquire first  */
@@ -84,8 +92,7 @@ try_again:
 	}
 
 	/* Measure how long this thread has the lock */
-	 
-	pthread_spin_lock(&spinlock);
+	pthread_mutex_lock(&lock);
 
 	/* #####################  CRITICAL SECTION ######################### */
 
@@ -99,7 +106,9 @@ try_again:
 		asm(""); /* Avoids GCC optimizations */
 	}
 
-	pthread_spin_unlock(&spinlock);
+	pthread_mutex_unlock(&lock);
+
+out:
 	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tr->tp);
 
 	timeval_substract(&aux_time,&tr->tp,&start);
@@ -123,9 +132,44 @@ int compute_percentage(struct test_run *tr, long long int total)
 	return ((double)part / total) * 100;
 }
 
+enum {MP_NONE, MP_INHERIT, MP_PROTECT, MP_CB2} mutex_proto = MP_NONE;
+void init_lock()
+{
+	pthread_mutexattr_t attr;
+	int p;
+
+	if (pthread_mutexattr_init(&attr) != 0) {
+		errExit("Could not init mutex attr");
+	}
+
+	switch (mutex_proto) {
+	default:
+	case MP_CB2:
+	case MP_NONE:
+		p = PTHREAD_PRIO_NONE;
+		break;
+	case MP_INHERIT:
+		p = PTHREAD_PRIO_INHERIT;
+		break;
+	case MP_PROTECT:
+		p = PTHREAD_PRIO_PROTECT;
+		break;
+	}
+
+	if (pthread_mutexattr_setprotocol(&attr, p) != 0) {
+		errExit("Could not init mutex attr");
+	}
+
+	pthread_mutex_init(&lock, &attr);
+
+	if (pthread_mutexattr_destroy(&attr) != 0) {
+		errExit("Could not destroy mutex attr");
+	}
+}
+
 int main(int argc, char *argv[])
 {
-	int i, opt, cpu = 0, ncpu = get_nprocs(), thread_count = ncpu, flags = 0;
+	int i, opt, ncpu = get_nprocs(), thread_count = ncpu, flags = 0;
 	pthread_t *threads;
 	pthread_attr_t thread_attr;
 	struct test_run *tr, *collection_tr;
@@ -136,8 +180,12 @@ int main(int argc, char *argv[])
 	cpu_set_t cpuset;
         long long int total, nano = 1000000000;
 	char *sp1= "  ", sp2 = ' ';
+
+	if (ncpu < 2) {
+		errExit("This benchmark requires at least 2 cores to run\n");
+	}
 	
-	while ((opt = getopt(argc, argv, "hn:f")) != -1) {
+	while ((opt = getopt(argc, argv, "hn:p:")) != -1) {
 		switch (opt) {
 			case 'h':
 				printf("Usage: %s [-n nthreads]\n",argv[0]);
@@ -146,13 +194,16 @@ int main(int argc, char *argv[])
 				exit(EXIT_SUCCESS);
 			case 'n':
 				thread_count = atoi(optarg);
-				if (thread_count <= 0){
-					fprintf(stderr, "Invalid number of threads (%d)!\n",thread_count);
+				if (thread_count < 3){
+					fprintf(stderr, "This benchmark requires at least 3 threads (%d)!\n",thread_count);
 					exit(EXIT_FAILURE);
 				}
 				break;
-			case 'f':
-				flags = 1;
+			case 'p':
+				mutex_proto = atoi(optarg);
+				if (mutex_proto < 0 || mutex_proto > 3) {
+					errExit("Not a valid mutex protocol");
+				}
 				break;
 			default:
 				fprintf(stderr, "Usage: %s [-n nthreads]\n", argv[0]);
@@ -185,8 +236,8 @@ int main(int argc, char *argv[])
 		errExit("Could not set the CFS scheduler");
 	}
 
-	/* Initialize spinlock */
- 	pthread_spin_init(&spinlock, 0);
+	/* Initialize lock */
+	init_lock();
 
 	/* Initialize barrier */
 	if (pthread_barrier_init(&barrier, NULL, thread_count) != 0) {
@@ -210,27 +261,28 @@ int main(int argc, char *argv[])
 	else printf(" thread zero has the lowest priority.\n");
 
 	for (i = 0; i < thread_count; i++){
-
-		/* Set processor affinity */
-		CPU_ZERO(&cpuset);
-		CPU_SET(cpu, &cpuset);
-		//cpu = (cpu + 1) % ncpu;
-
-		if (pthread_attr_setaffinity_np(&thread_attr,sizeof(cpu_set_t),&cpuset) != 0) {
-			errExit("Could not set thread affinity");
-		}
-
 		/* Make a results struct for this thread */
 		if (!(tr = malloc(sizeof(struct test_run)))) {
 			errExit("Could not malloc test results struct for thread");
 		}
 
-		tr->priority = LOWEST_PRIO;
+		/* Set priorities and CPU affinity based on thread number */
 		tr->id = i;
-
-		/* All threads are the highest priority but one (If we didn't do -f) */
-		if (!flags && i > 0){
+		tr->pinning = 1;
+		if (i == 0) {
 			tr->priority = HIGHEST_PRIO;
+			tr->pinning = 0;
+		} else if (i == 1) {
+			tr->priority = LOWEST_PRIO;
+		} else {
+			/* TODO: Somewhere in between... */
+			tr->priority = 0;
+		}
+
+		CPU_ZERO(&cpuset);
+		CPU_SET(tr->pinning, &cpuset);
+		if (pthread_attr_setaffinity_np(&thread_attr,sizeof(cpu_set_t),&cpuset) != 0) {
+			errExit("Could not set thread affinity");
 		}
 
 		if (pthread_create(&threads[i], &thread_attr, thread_func, tr) != 0) {
@@ -255,6 +307,7 @@ int main(int argc, char *argv[])
 		collection_tr[i].tp.tv_sec  = tr->tp.tv_sec;
 		collection_tr[i].tp.tv_nsec = tr->tp.tv_nsec;
 		collection_tr[i].priority   = tr->priority;
+		collection_tr[i].pinning    = tr->pinning;
 	}
 
 	total = total_time.tv_sec * nano + total_time.tv_nsec; 
@@ -263,18 +316,9 @@ int main(int argc, char *argv[])
 
 		tr = &collection_tr[i];
 
-		if (i < 10){
-			printf("Thread %d:  Priority %s%d CPU time:  %d:%09d  CPU%: %d\n",
-		     	i,(tr->priority > 0)?sp1:&sp2,
-		  	tr->priority, tr->tp.tv_sec, 
-		       	tr->tp.tv_nsec, compute_percentage(tr,total));
-		}
-		else {
-			printf("Thread %d: Priority %s%d CPU time:  %d:%09d  CPU%: %d\n",
-		     	i,(tr->priority > 0)?sp1:&sp2,
-		  	tr->priority, tr->tp.tv_sec, 
-		       	tr->tp.tv_nsec, compute_percentage(tr,total));
-		}	
+		printf("Thread: %d\tPriority: %s%d\tCPU affinity: %d\tCPU time: %d:%09d\tCPU%: %d\n",
+				i,(tr->priority > 0)?sp1:&sp2, tr->priority, tr->pinning,
+				tr->tp.tv_sec, tr->tp.tv_nsec, compute_percentage(tr,total));
 	
 	}
 
@@ -290,7 +334,7 @@ int main(int argc, char *argv[])
 		(long long)total_time.tv_sec,total_time.tv_nsec);
 	
 	/* Cleanup */
-	pthread_spin_destroy(&spinlock);
+	pthread_mutex_destroy(&lock);
 	pthread_barrier_destroy(&barrier);
 	free(threads);
 	free(collection_tr);
