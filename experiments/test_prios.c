@@ -19,55 +19,20 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 
+#include "util.h"
+#include "runtime_lock.h"
+
 #define HIGHEST_PRIO  (-20)
 #define LOWEST_PRIO    (19)
 #define HIGH_PRIO_CPU  (1)
 #define LOW_PRIO_CPU   (0)
 
-#define errExit(msg) do { perror(msg); exit(EXIT_FAILURE); } while (0)
-
-// TODO: wrap in CB2 Lock
-pthread_mutex_t lock;
-enum {MP_NONE, MP_INHERIT, MP_PROTECT, MP_CB2} mutex_proto = MP_NONE;
-void init_lock(void)
-{
-	pthread_mutexattr_t attr;
-	int p;
-
-	if (pthread_mutexattr_init(&attr) != 0) {
-		errExit("Could not init mutex attr");
-	}
-
-	switch (mutex_proto) {
-	default:
-	case MP_CB2:
-	case MP_NONE:
-		p = PTHREAD_PRIO_NONE;
-		break;
-	case MP_INHERIT:
-		/* Priority Inheritance */
-		p = PTHREAD_PRIO_INHERIT;
-		break;
-	case MP_PROTECT:
-		p = PTHREAD_PRIO_PROTECT;
-		break;
-	}
-
-	if (pthread_mutexattr_setprotocol(&attr, p) != 0) {
-		errExit("Could not init mutex attr");
-	}
-
-	pthread_mutex_init(&lock, &attr);
-
-	if (pthread_mutexattr_destroy(&attr) != 0) {
-		errExit("Could not destroy mutex attr");
-	}
-}
-
 /* Control for forcing the scenario we want */
 pthread_barrier_t barrier;
 volatile int lowest_acquired = 0;
 volatile int highest_acquired = 0;
+
+runtime_lock *our_lock;
 
 /* Encapsulates per-thread test data */
 struct test_run {
@@ -109,6 +74,12 @@ int compute_percentage(struct test_run *tr, long long int total)
 	long long int part, nano = 1000000000;
 	part  = (tr->tp.tv_sec * nano) + tr->tp.tv_nsec;
 	return ((double)part / total) * 100;
+}
+
+void init_lock(void)
+{
+	our_lock = &cb2_lock;
+	our_lock->init();
 }
 
 /********************* the real code *******************/
@@ -160,7 +131,7 @@ try_again:
 	}
 
 	/* Measure how long this thread has the lock */
-	pthread_mutex_lock(&lock);
+	our_lock->lock();
 
 	/* Highest priority thread acquired the lock */
 	if (tr->id == 1) {
@@ -179,7 +150,7 @@ try_again:
 		asm(""); /* Avoids GCC optimizations */
 	}
 
-	pthread_mutex_unlock(&lock);
+	our_lock->unlock();
 
 out:
 	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tr->tp);
@@ -230,12 +201,12 @@ int main(int argc, char *argv[])
 					exit(EXIT_FAILURE);
 				}
 				break;
-			case 'p':
-				mutex_proto = atoi(optarg);
-				if (mutex_proto < 0 || mutex_proto > 3) {
-					errExit("Not a valid mutex protocol");
-				}
-				break;
+		//	case 'p':
+		//		mutex_proto = atoi(optarg);
+		//		if (mutex_proto < 0 || mutex_proto > 3) {
+		//			errExit("Not a valid mutex protocol");
+		//		}
+		//		break;
 			default:
 				fprintf(stderr, "Usage: %s [-n nthreads]\n", argv[0]);
 				exit(EXIT_FAILURE);
@@ -383,7 +354,7 @@ int main(int argc, char *argv[])
 		(long long)total_time.tv_sec,total_time.tv_nsec);
 	
 	/* Cleanup */
-	pthread_mutex_destroy(&lock);
+	our_lock->destroy();
 	pthread_barrier_destroy(&barrier);
 	free(threads);
 	free(collection_tr);
