@@ -13,6 +13,7 @@
 #include <sched.h>
 #include <sys/sysinfo.h>
 #include <sys/resource.h>
+#include <sys/types.h>
 #include <time.h>
 #include <errno.h>
 #include <linux/sched.h>
@@ -25,6 +26,49 @@
 
 #define errExit(msg) do { perror(msg); exit(EXIT_FAILURE); } while (0)
 
+// TODO: wrap in CB2 Lock
+pthread_mutex_t lock;
+enum {MP_NONE, MP_INHERIT, MP_PROTECT, MP_CB2} mutex_proto = MP_NONE;
+void init_lock(void)
+{
+	pthread_mutexattr_t attr;
+	int p;
+
+	if (pthread_mutexattr_init(&attr) != 0) {
+		errExit("Could not init mutex attr");
+	}
+
+	switch (mutex_proto) {
+	default:
+	case MP_CB2:
+	case MP_NONE:
+		p = PTHREAD_PRIO_NONE;
+		break;
+	case MP_INHERIT:
+		/* Priority Inheritance */
+		p = PTHREAD_PRIO_INHERIT;
+		break;
+	case MP_PROTECT:
+		p = PTHREAD_PRIO_PROTECT;
+		break;
+	}
+
+	if (pthread_mutexattr_setprotocol(&attr, p) != 0) {
+		errExit("Could not init mutex attr");
+	}
+
+	pthread_mutex_init(&lock, &attr);
+
+	if (pthread_mutexattr_destroy(&attr) != 0) {
+		errExit("Could not destroy mutex attr");
+	}
+}
+
+/* Control for forcing the scenario we want */
+pthread_barrier_t barrier;
+volatile int lowest_acquired = 0;
+
+/* Encapsulates per-thread test data */
 struct test_run {
 	struct timespec tp;
 	/* Priority of the thread that attempts to acquire the lock */
@@ -32,12 +76,9 @@ struct test_run {
 	/* Core to which this threads is assigned to */
 	int pinning;
 	int id;
+
+	pid_t tid;
 };
-
-pthread_barrier_t barrier;
-int lowest_acquired = 0;
-
-pthread_mutex_t lock;
 
 void timeval_substract(struct timespec *result, 
 		  struct timespec *x, 
@@ -62,6 +103,15 @@ void timeval_substract(struct timespec *result,
   	result->tv_nsec = x->tv_nsec - y->tv_nsec;
 }
 
+int compute_percentage(struct test_run *tr, long long int total)
+{
+	long long int part, nano = 1000000000;
+	part  = (tr->tp.tv_sec * nano) + tr->tp.tv_nsec;
+	return ((double)part / total) * 100;
+}
+
+/********************* the real code *******************/
+
 void bystander_stuff(void)
 {
 	// TODO -> We need to measure the time they got to use the CPU
@@ -78,7 +128,8 @@ void *thread_func(void *vargp)
 	struct timespec start, aux_time;
 	int rc, s = 0, m = 0;
 
-	if (setpriority(PRIO_PROCESS,getpid(),tr->priority) == -1 ){
+	tr->tid = gettid();
+	if (setpriority(PRIO_PROCESS, tr->tid, tr->priority) == -1 ){
 		errExit("Error setting the thread priority");
 	}
 
@@ -89,7 +140,8 @@ void *thread_func(void *vargp)
 		errExit("pthread barrier error");
 	}
 
-	if (tr->id > 1) {
+	/* If this is a bystander thread... */
+	if (tr->id != HIGH_PRIO_CPU && tr->id != LOW_PRIO_CPU) {
 		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
 		bystander_stuff();
 		goto out;
@@ -135,50 +187,6 @@ out:
 	tr->tp.tv_nsec = aux_time.tv_nsec;
 
 	return (void*)tr;
-}
-
-int compute_percentage(struct test_run *tr, long long int total)
-{
-	long long int part, nano = 1000000000; 
-	part  = (tr->tp.tv_sec * nano) + tr->tp.tv_nsec;
-	return ((double)part / total) * 100;
-}
-
-enum {MP_NONE, MP_INHERIT, MP_PROTECT, MP_CB2} mutex_proto = MP_NONE;
-
-void init_lock(void)
-{
-	pthread_mutexattr_t attr;
-	int p;
-
-	if (pthread_mutexattr_init(&attr) != 0) {
-		errExit("Could not init mutex attr");
-	}
-
-	switch (mutex_proto) {
-	default:
-	case MP_CB2:
-	case MP_NONE:
-		p = PTHREAD_PRIO_NONE;
-		break;
-	case MP_INHERIT:
-		/* Priority Inheritance */
-		p = PTHREAD_PRIO_INHERIT;
-		break;
-	case MP_PROTECT:
-		p = PTHREAD_PRIO_PROTECT;
-		break;
-	}
-
-	if (pthread_mutexattr_setprotocol(&attr, p) != 0) {
-		errExit("Could not init mutex attr");
-	}
-
-	pthread_mutex_init(&lock, &attr);
-
-	if (pthread_mutexattr_destroy(&attr) != 0) {
-		errExit("Could not destroy mutex attr");
-	}
 }
 
 int main(int argc, char *argv[])
@@ -305,7 +313,7 @@ int main(int argc, char *argv[])
 			
 			/* Get values between -1 and -19 */ 
 			if (tr->priority > 18){
-				tr->priority = 0 - tr-priority + 18 ;
+				tr->priority = 0 - tr->priority + 18 ;
 			}
 
 			tr->pinning = rand() % 1;
