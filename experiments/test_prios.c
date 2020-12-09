@@ -62,6 +62,16 @@ void timeval_substract(struct timespec *result,
   	result->tv_nsec = x->tv_nsec - y->tv_nsec;
 }
 
+void bystander_stuff(void)
+{
+	// TODO -> We need to measure the time they got to use the CPU
+	// before the high priority thread acquired the lock
+	// so we can endlessly loop and break when the high prio acquires
+	// the lock.
+	// When the high prio acquires the lock he can simply leave the CS
+	// and we can finish. 
+}
+
 void *thread_func(void *vargp) 
 {
 	struct test_run *tr = (struct test_run*)vargp;
