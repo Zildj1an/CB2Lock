@@ -18,8 +18,10 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 
-#define HIGHEST_PRIO (-20)
-#define LOWEST_PRIO   (19)
+#define HIGHEST_PRIO  (-20)
+#define LOWEST_PRIO    (19)
+#define HIGH_PRIO_CPU  (1)
+#define LOW_PRIO_CPU   (0)
 
 #define errExit(msg) do { perror(msg); exit(EXIT_FAILURE); } while (0)
 
@@ -27,6 +29,7 @@ struct test_run {
 	struct timespec tp;
 	/* Priority of the thread that attempts to acquire the lock */
 	int priority;
+	/* Core to which this threads is assigned to */
 	int pinning;
 	int id;
 };
@@ -78,8 +81,7 @@ void *thread_func(void *vargp)
 
 	if (tr->id > 1) {
 		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
-
-		/* TODO: Some other nonsense for bystander threads */
+		bystander_stuff();
 		goto out;
 	}
 
@@ -133,7 +135,8 @@ int compute_percentage(struct test_run *tr, long long int total)
 }
 
 enum {MP_NONE, MP_INHERIT, MP_PROTECT, MP_CB2} mutex_proto = MP_NONE;
-void init_lock()
+
+void init_lock(void)
 {
 	pthread_mutexattr_t attr;
 	int p;
@@ -149,6 +152,7 @@ void init_lock()
 		p = PTHREAD_PRIO_NONE;
 		break;
 	case MP_INHERIT:
+		/* Priority Inheritance */
 		p = PTHREAD_PRIO_INHERIT;
 		break;
 	case MP_PROTECT:
@@ -180,6 +184,7 @@ int main(int argc, char *argv[])
 	cpu_set_t cpuset;
         long long int total, nano = 1000000000;
 	char *sp1= "  ", sp2 = ' ';
+	time_t t;
 
 	if (ncpu < 2) {
 		errExit("This benchmark requires at least 2 cores to run\n");
@@ -258,7 +263,12 @@ int main(int argc, char *argv[])
 	if (flags){
 		printf(" all threads with same priority.\n");
 	}
-	else printf(" thread zero has the lowest priority.\n");
+	else {
+		printf(" thread zero has the lowest priority.\n");
+	}
+
+	/* Intialize random number generator */
+   	srand((unsigned) time(&t));
 
 	for (i = 0; i < thread_count; i++){
 		/* Make a results struct for this thread */
@@ -268,19 +278,32 @@ int main(int argc, char *argv[])
 
 		/* Set priorities and CPU affinity based on thread number */
 		tr->id = i;
-		tr->pinning = 1;
-		if (i == 0) {
-			tr->priority = HIGHEST_PRIO;
-			tr->pinning = 0;
-		} else if (i == 1) {
+		tr->pinning = HIGH_PRIO_CPU;
+
+		if (i == LOW_PRIO_CPU) {
 			tr->priority = LOWEST_PRIO;
+			tr->pinning = LOW_PRIO_CPU;
+		} 
+		else if (i == HIGH_PRIO_CPU) {
+			tr->priority = HIGHEST_PRIO;
 		} else {
-			/* TODO: Somewhere in between... */
-			tr->priority = 0;
+			/* This thread is a bystander, and his location and 
+		           priority level will be random, but in between the high
+		           and the low priority threads (-20,19)
+			*/
+			tr->priority = rand() % 37;
+			
+			/* Get values between -1 and -19 */ 
+			if (tr->priority > 18){
+				tr->priority = 0 - tr-priority + 18 ;
+			}
+
+			tr->pinning = rand() % 1;
 		}
 
 		CPU_ZERO(&cpuset);
 		CPU_SET(tr->pinning, &cpuset);
+
 		if (pthread_attr_setaffinity_np(&thread_attr,sizeof(cpu_set_t),&cpuset) != 0) {
 			errExit("Could not set thread affinity");
 		}
