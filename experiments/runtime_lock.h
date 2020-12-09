@@ -14,4 +14,4 @@ typedef struct _runtime_lock {
 	void (*destroy)(void);
 } runtime_lock;
 
-extern struct _runtime_lock cb2_lock;
+extern struct _runtime_lock mutex_lock;

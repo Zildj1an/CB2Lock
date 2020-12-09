@@ -5,31 +5,31 @@
 
 pthread_mutex_t lock;
 
-static void _cb2_lock(void)
+static void _mutex_lock(void)
 {
 	pthread_mutex_lock(&lock);
 }
 
-static void _cb2_unlock(void)
+static void _mutex_unlock(void)
 {
 	pthread_mutex_unlock(&lock);
 }
 
-static void _cb2_init(void) {
+static void _mutex_init(void) {
 	pthread_mutex_init(&lock, NULL);
 }
 
-static void _cb2_destroy(void) {
+static void _mutex_destroy(void) {
 	pthread_mutex_destroy(&lock);
 }
 
-runtime_lock cb2_lock = {
-	.type = RT_CB2,
-	.description = "our lock",
-	.lock = _cb2_lock,
-	.unlock = _cb2_unlock,
-	.init = _cb2_init,
-	.destroy = _cb2_destroy
+runtime_lock mutex_lock = {
+	.type = RT_MUTEX,
+	.description = "Normal pthread mutex",
+	.lock = _mutex_lock,
+	.unlock = _mutex_unlock,
+	.init = _mutex_init,
+	.destroy = _mutex_destroy
 };
 
 /* old mutex init */

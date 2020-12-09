@@ -78,7 +78,7 @@ int compute_percentage(struct test_run *tr, long long int total)
 
 void init_lock(void)
 {
-	our_lock = &cb2_lock;
+	our_lock = &mutex_lock;
 	our_lock->init();
 }
 
