@@ -3,33 +3,33 @@
 
 #include <pthread.h>
 
-pthread_mutex_t lock;
+static pthread_mutex_t lock;
 
-static void _mutex_lock(void)
+static void _lock(void)
 {
 	pthread_mutex_lock(&lock);
 }
 
-static void _mutex_unlock(void)
+static void _unlock(void)
 {
 	pthread_mutex_unlock(&lock);
 }
 
-static void _mutex_init(void) {
+static void _init(__attribute__((unused)) runtime_lock_attr *attr) {
 	pthread_mutex_init(&lock, NULL);
 }
 
-static void _mutex_destroy(void) {
+static void _destroy(void) {
 	pthread_mutex_destroy(&lock);
 }
 
 runtime_lock mutex_lock = {
-	.type = RT_MUTEX,
+	.type = RT_NONE,
 	.description = "Normal pthread mutex",
-	.lock = _mutex_lock,
-	.unlock = _mutex_unlock,
-	.init = _mutex_init,
-	.destroy = _mutex_destroy
+	.lock = _lock,
+	.unlock = _unlock,
+	.init = _init,
+	.destroy = _destroy
 };
 
 /* old mutex init */

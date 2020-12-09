@@ -32,7 +32,7 @@ pthread_barrier_t barrier;
 volatile int lowest_acquired = 0;
 volatile int highest_acquired = 0;
 
-runtime_lock *our_lock;
+runtime_lock *our_lock = NULL;
 
 /* Encapsulates per-thread test data */
 struct test_run {
@@ -76,10 +76,26 @@ int compute_percentage(struct test_run *tr, long long int total)
 	return ((double)part / total) * 100;
 }
 
-void init_lock(void)
+int init_lock(int lock_proto)
 {
-	our_lock = &mutex_lock;
-	our_lock->init();
+	runtime_lock_attr attr;
+
+	switch (lock_proto) {
+	case RT_INHERIT:
+	case RT_NONE:
+		our_lock = &mutex_lock;
+		break;
+	case RT_PROTECT:
+		our_lock = &protect_lock;
+		attr.ceiling = HIGHEST_PRIO;
+		break;
+	default:
+		/* unknown protocol */
+		return -1;
+	}
+
+	our_lock->init(&attr);
+	return 0;
 }
 
 /********************* the real code *******************/
@@ -201,12 +217,11 @@ int main(int argc, char *argv[])
 					exit(EXIT_FAILURE);
 				}
 				break;
-		//	case 'p':
-		//		mutex_proto = atoi(optarg);
-		//		if (mutex_proto < 0 || mutex_proto > 3) {
-		//			errExit("Not a valid mutex protocol");
-		//		}
-		//		break;
+			case 'p':
+				if (init_lock(atoi(optarg)) < 0) {
+					errExit("Not a valid mutex protocol");
+				}
+				break;
 			default:
 				fprintf(stderr, "Usage: %s [-n nthreads]\n", argv[0]);
 				exit(EXIT_FAILURE);
@@ -233,13 +248,15 @@ int main(int argc, char *argv[])
 		errExit("Could not set explicit schedule");
 	}
 
+	/* Init lock */
+	if (!our_lock) {
+		init_lock(RT_NONE);
+	}
+
 	/* Set the CFS scheduler (Most likely it already was) */
 	if (pthread_attr_setschedpolicy(&thread_attr, SCHED_NORMAL) != 0) {
 		errExit("Could not set the CFS scheduler");
 	}
-
-	/* Initialize lock */
-	init_lock();
 
 	/* Initialize barrier */
 	if (pthread_barrier_init(&barrier, NULL, thread_count) != 0) {
