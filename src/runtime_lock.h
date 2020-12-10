@@ -50,5 +50,6 @@ typedef struct _runtime_lock {
 extern struct _runtime_lock mutex_lock;
 extern struct _runtime_lock inherit_lock;
 extern struct _runtime_lock protect_lock;
+extern struct _runtime_lock CB2_lock;
 
 #endif

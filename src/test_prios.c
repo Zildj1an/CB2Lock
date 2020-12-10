@@ -58,14 +58,14 @@ void timeval_substract(struct timespec *result,
         result->tv_nsec = x->tv_nsec - y->tv_nsec;
 }
 
-int inline compute_percentage(struct test_run *tr, long long int total)
+int compute_percentage(struct test_run *tr, long long int total)
 {
         long long int part, nano = 1000000000;
         part  = (tr->tp.tv_sec * nano) + tr->tp.tv_nsec;
         return ((double)part / total) * 100;
 }
 
-void inline __security_check(void)
+void __security_check(void)
 {
 	assert(our_lock->lock && "You need to implement a lock function buddy");
 	assert(our_lock->unlock && "I don't see any unlock in your lock...");
