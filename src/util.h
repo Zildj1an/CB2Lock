@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <semaphore.h>
 #include <sched.h>
 #include <sys/sysinfo.h>
 #include <sys/resource.h>

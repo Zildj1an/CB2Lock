@@ -19,8 +19,7 @@
 
 /* Control for forcing the scenario we want */
 pthread_barrier_t barrier;
-static volatile int lowest_acquired = 0;
-static volatile int highest_acquired = 0;
+sem_t lowest_acquired;
 static volatile int done = 0;
 
 /* Our lock, that will be of the type specified at runtime */
@@ -108,12 +107,14 @@ int init_lock(int lock_proto)
 
 /********************* the real code *******************/
 
-void bystander_stuff(void)
+void bystander_stuff(struct test_run *tr)
 {
 	int s;
+	tr->iter = 0;
 
 	/* Loop until the highest priority thread acquires the lock */
 	while (!done) {
+		tr->iter++;
 		/* Chill... */
 		for (s = 0; s < BILLION; s++){
 			asm(""); /* Avoids GCC optimizations */
@@ -146,7 +147,7 @@ void *thread_func(void *vargp)
 	/* If this is a bystander thread... */
 	if (tr->id != HIGH_PRIO_CPU && tr->id != LOW_PRIO_CPU) {
 		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
-		bystander_stuff();
+		bystander_stuff(tr);
 		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end);
 
 		/* calclate time spent */
@@ -158,8 +159,8 @@ void *thread_func(void *vargp)
 	for (i = 0; i < tr->iter; i++) {
 		/* Force preferential treatment by letting the low priority thread
 		 * acquire the lock first */
-		while (tr->id != 0 && !lowest_acquired){
-			asm("");
+		if (tr->id != 0) {
+			sem_wait(&lowest_acquired);
 		}
 
 		/* Measure how long this thread has the lock */
@@ -168,17 +169,14 @@ void *thread_func(void *vargp)
 		/* #####################  CRITICAL SECTION ######################### */
 		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
 
-		/* If we set this for every thread, we don't need an atomic flag     */
-		lowest_acquired = 1;
-
-		/* Let's make the time gap more obvious */
-		for (s = 0; s < 1000000; s++){
-			asm(""); /* Avoids GCC optimizations */
-		}
-
 		/* we are about to let go of the lock */
 		if (tr->id == 0) {
-			lowest_acquired = 0;
+			sem_post(&lowest_acquired);
+		}
+
+		/* Let's make the time gap more obvious */
+		for (s = 0; s < BILLION; s++){
+			asm(""); /* Avoids GCC optimizations */
 		}
 
 		our_lock->unlock();
@@ -199,10 +197,10 @@ out:
 
 int main(int argc, char *argv[])
 {
-	int i, opt, ncpu = get_nprocs(), thread_count = ncpu, flags = 0, iter = 128;
+	int i, opt, ncpu = get_nprocs(), thread_count = ncpu, flags = 0, iter = 1;
 	pthread_t *threads;
 	pthread_attr_t thread_attr;
-	struct test_run *tr, *collection_tr;
+	struct test_run *tr, **collection_tr;
 	/* bench_time is for the execution of all threads and total_time
            is the sum of per-thread CPU time.
 	*/
@@ -271,6 +269,11 @@ int main(int argc, char *argv[])
 		init_lock(RT_NONE);
 	}
 
+	/* Init lowest acquired sem */
+	if (sem_init(&lowest_acquired, 0, 1) != 0) {
+		errExit("Could not init semaphore");
+	}
+
 	/* Set the CFS scheduler (Most likely it already was) */
 	if (pthread_attr_setschedpolicy(&thread_attr, SCHED_NORMAL) != 0) {
 		errExit("Could not set the CFS scheduler");
@@ -282,7 +285,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* Allocate memory for the array of test run */
-	if (!(collection_tr = calloc(thread_count, sizeof(struct test_run)))){
+	if (!(collection_tr = calloc(thread_count, sizeof(struct test_run*)))){
 		errExit("Could not calloc collection_tr");
 	}
 
@@ -359,22 +362,21 @@ int main(int argc, char *argv[])
 
 		timeval_accumulate(&total_time, &tr->tp);
 
-		collection_tr[i].tp.tv_sec  = tr->tp.tv_sec;
-		collection_tr[i].tp.tv_nsec = tr->tp.tv_nsec;
-		collection_tr[i].priority   = tr->priority;
-		collection_tr[i].pinning    = tr->pinning;
+		collection_tr[i] = tr;
 	}
 
 	total = total_time.tv_sec * BILLION + total_time.tv_nsec; 
 	
 	for (i = 0; i < thread_count; ++i){
 
-		tr = &collection_tr[i];
+		tr = collection_tr[i];
 
-		printf("Thread: %d\tPriority: %d\tCPU affinity: %d\tCPU time: %d:%09d\tCPU%: %d\n",
+		printf("Thread: %d\tPriority: %d\tCPU affinity: %d\tCPU time: %d:%09d\tCPU%: %02d\tIterations: %d\n",
 				i, tr->priority, tr->pinning, tr->tp.tv_sec, tr->tp.tv_nsec,
-				compute_percentage(tr,total));
+				compute_percentage(tr,total), tr->iter);
 	
+		free(tr);
+		collection_tr[i] = NULL;
 	}
 
 	/* Compute total execution time */
@@ -391,9 +393,10 @@ int main(int argc, char *argv[])
 	/* Cleanup */
 	our_lock->destroy();
 	pthread_barrier_destroy(&barrier);
+	sem_destroy(&lowest_acquired);
 	free(threads);
-	free(collection_tr);
 	pthread_attr_destroy(&thread_attr);
+	free(collection_tr);
 
 	// See https://stackoverflow.com/questions/48527189/is-there-a-way-to-flush-the-entire-cpu-cache-related-to-a-program?noredirect=1&lq=1
 	// Clear all cache contents
