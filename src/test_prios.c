@@ -73,7 +73,7 @@ void __security_check(void)
 	assert(our_lock->destroy && "Where is the destroy() for the lock?");
 }
 
-int init_lock(int lock_proto)
+int init_lock(int lock_proto, int sum_bys)
 {
 	runtime_lock_attr attr;
 
@@ -88,6 +88,9 @@ int init_lock(int lock_proto)
 		our_lock = &protect_lock;
 		attr.ceiling = HIGHEST_PRIO;
 		break;
+	case RT_CB2:
+		our_lock = &CB2_lock;
+		attr.by_tickets_cpu = sum_bys;
 	default:
 		/* unknown protocol */
 		return -1;
@@ -190,7 +193,7 @@ out:
 
 int main(int argc, char *argv[])
 {
-	int opt, ncpu = get_nprocs(), thread_count = ncpu, flags = 0;
+	int opt, ncpu = get_nprocs(), thread_count = ncpu, flags = 0, is_cb2=0;
 	pthread_t *threads;
 	pthread_attr_t thread_attr;
 	struct test_run *tr, *collection_tr;
@@ -202,6 +205,7 @@ int main(int argc, char *argv[])
         long long int total, nano = 1000000000;
 	time_t t;
 	register int i;
+	int sum_bys = 0;
 
 	if (ncpu < 2) {
 		errExit("This benchmark requires at least 2 cores to run\n");
@@ -222,8 +226,13 @@ int main(int argc, char *argv[])
 				}
 				break;
 			case 'p':
-				if (init_lock(atoi(optarg)) < 0) {
-					errExit("Not a valid mutex protocol");
+				if (atoi(optarg) != RT_CB2){ 
+					if (init_lock(atoi(optarg),0) < 0) {
+					    errExit("Not a valid mutex protocol");
+					}
+				}
+				else {
+					is_cb2 = 1;
 				}
 				break;
 			default:
@@ -253,8 +262,8 @@ int main(int argc, char *argv[])
 	}
 
 	/* Init lock */
-	if (!our_lock) {
-		init_lock(RT_NONE);
+	if (!is_cb2 && !our_lock) {
+		init_lock(RT_NONE,0);
 	}
 
 	/* Set the CFS scheduler (Most likely it already was) */
@@ -315,7 +324,11 @@ int main(int argc, char *argv[])
 			if (tr->priority > 18){
 				tr->priority = 0 - tr->priority + 18 ;
 			}
-
+			
+			if (is_cb2){
+				sum_bys += tr->priority;
+			}
+			
 			tr->pinning = rand() % 1;
 		}
 
@@ -326,8 +339,21 @@ int main(int argc, char *argv[])
 			errExit("Could not set thread affinity");
 		}
 
-		if (pthread_create(&threads[i], &thread_attr, thread_func, tr) != 0) {
+		if (!is_cb2){
+		   if (pthread_create(&threads[i], &thread_attr, thread_func, tr) != 0) {
 			errExit("Could not create thread");
+		   }
+		}
+	}
+
+	if (is_cb2){
+
+		init_lock(RT_CB2,sum_bys);	
+
+		for (i = 0; i < thread_count; ++i) {
+		   if (pthread_create(&threads[i], &thread_attr, thread_func, tr) != 0) {
+			errExit("Could not create thread");
+		   }
 		}
 	}
 

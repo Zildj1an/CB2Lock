@@ -11,10 +11,7 @@
 #define __APPLY_MAP_K__
 
 #ifdef __APPLY_MAP_K__
-#include <map>
-
-std::map<int, int> k_map;
-
+#include "map.h"
 #endif
 
 static pthread_mutex_t lock;
@@ -23,6 +20,8 @@ static __thread int original_priority = 0;
 
 static volatile pid_t owner_tid = 0;
 static volatile int owner_priority;
+
+static volatile int bystander_tickets_cpu;
 
 static time_t t;
 
@@ -42,12 +41,9 @@ int compute_times_factor(pid_t HP_pid)
 
 #ifdef __APPLY_MAP_K__
 	
-	if (k_map.find(HP_pid) == k_map.end()){
-		k_map[HP_pid] = 0;
-	}
-
+	insert_if_new(HP_pid);
 	ret = initial_K;
-	ret -= k_map[HP_pid]++;
+	ret -= get_and_increase(HP_pid);
 	ret = (ret > 0)? ret : 0;
 
 #endif
@@ -72,6 +68,9 @@ int cb2_lock_inversion(int HP_prio, pid_t HP_pid)
 	if (winning_ticket > bystander_tickets_cpu){
 		ret = 1;
 	} 
+	else {
+		map_decrease(HP_pid);
+	}
 	
 	return ret;
 }
@@ -192,7 +191,7 @@ static void cb2_destroy(void)
 	}
 }
 
-runtime_lock inherit_lock = {
+runtime_lock CB2_lock = {
 	.type         = RT_CB2,
 	.description  = "Mutex with CB2Lock fair lottery invesion",
 	.lock         = cb2_lock,
