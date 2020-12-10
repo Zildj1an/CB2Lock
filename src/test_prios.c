@@ -164,11 +164,11 @@ void *thread_func(void *vargp)
 	/* If this is a bystander thread... */
 	if (tr->id != HIGH_PRIO_CPU && tr->id != LOW_PRIO_CPU) {
 	
-		printf("hola desde thread %d\n",tr->id);
+		printf("debug> Hi it's thread %d\n",tr->id);
 		bystander_stuff(tr, &aux_time, &start, &end);
 	}
 
-	printf("hola desde thread %d\n",tr->id);
+	printf("debug> Hi it's thread %d\n",tr->id);
 
 	for (i = 0; i < tr->iter; i++) {
 
