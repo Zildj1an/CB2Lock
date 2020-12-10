@@ -68,9 +68,9 @@ int compute_percentage(struct test_run *tr, long long int total)
 void __security_check(void)
 {
 	assert(our_lock->lock && "You need to implement a lock function buddy");
-        assert(our_lock->unlock && "I don't see any unlock in your lock...");
-        assert(our_lock->init && "We need a init function in your lock");
-        assert(our_lock->destroy && "Where is the destroy() for the lock?");
+	assert(our_lock->unlock && "I don't see any unlock in your lock...");
+	assert(our_lock->init && "We need a init function in your lock");
+	assert(our_lock->destroy && "Where is the destroy() for the lock?");
 }
 
 int init_lock(int lock_proto)
@@ -78,9 +78,11 @@ int init_lock(int lock_proto)
 	runtime_lock_attr attr;
 
 	switch (lock_proto) {
-	case RT_INHERIT:
 	case RT_NONE:
 		our_lock = &mutex_lock;
+		break;
+	case RT_INHERIT:
+		our_lock = &inherit_lock;
 		break;
 	case RT_PROTECT:
 		our_lock = &protect_lock;
