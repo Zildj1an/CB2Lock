@@ -30,39 +30,3 @@ runtime_lock mutex_lock = {
 	.init        = _init,
 	.destroy     = _destroy
 };
-
-/* old mutex init */
-//void init_lock(void)
-//{
-//	pthread_mutexattr_t attr;
-//	int p;
-//
-//	if (pthread_mutexattr_init(&attr) != 0) {
-//		errExit("Could not init mutex attr");
-//	}
-//
-//	switch (mutex_proto) {
-//	default:
-//	case MP_CB2:
-//	case MP_NONE:
-//		p = PTHREAD_PRIO_NONE;
-//		break;
-//	case MP_INHERIT:
-//		/* Priority Inheritance */
-//		p = PTHREAD_PRIO_INHERIT;
-//		break;
-//	case MP_PROTECT:
-//		p = PTHREAD_PRIO_PROTECT;
-//		break;
-//	}
-//
-//	if (pthread_mutexattr_setprotocol(&attr, p) != 0) {
-//		errExit("Could not init mutex attr");
-//	}
-//
-//	pthread_mutex_init(&lock, &attr);
-//
-//	if (pthread_mutexattr_destroy(&attr) != 0) {
-//		errExit("Could not destroy mutex attr");
-//	}
-//}
