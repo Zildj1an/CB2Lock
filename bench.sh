@@ -30,6 +30,12 @@ disable_hyp &> /dev/null
 
 cd src
 
+# TODO:
+# add for loop for ceiling, inherit, and cb2 (normal lock is just for proving PI
+# exists
+#
+# 
+
 for m in {1..100}
 do
 	for i in {1..100}
@@ -38,6 +44,7 @@ do
 			continue
 		fi
 
+		# TODO: can we clear all cache???
 		# Clean everything
 		make clean &> /dev/null
 		make &> /dev/null

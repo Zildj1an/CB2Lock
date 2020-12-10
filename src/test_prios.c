@@ -228,6 +228,9 @@ out:
 
 int main(int argc, char *argv[])
 {
+	// TODO:
+	/* mmap to change VM region, them madvise to get rid of us for clear cache */
+
 	int opt, ncpu = get_nprocs(), thread_count = 3, flags = 0, is_cb2 = 0,
 		iter = 1;
 	pthread_t *threads;
