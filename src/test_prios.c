@@ -3,7 +3,7 @@
 # Microbenchmark to test the fairness of Priority Inversion on scenarios with #
 # low-priority threads acquiring the lock first, between current proposals    #
 # and our mutex CB2Lock.                                                      #
-#									      #
+#                                                                             #
 # Authors: Christopher Blackburn, Carlos Bilbao (2020)                        #
 ###############################################################################
 */
@@ -15,10 +15,12 @@
 #define HIGH_PRIO_CPU  (1)
 #define LOW_PRIO_CPU   (0)
 
+#define BILLION 1000000000
+
 /* Control for forcing the scenario we want */
 pthread_barrier_t barrier;
-volatile int lowest_acquired = 0;
-volatile int highest_acquired = 0;
+static volatile int lowest_acquired = 0;
+static volatile int done = 0;
 
 /* Our lock, that will be of the type specified at runtime */
 runtime_lock *our_lock = NULL;
@@ -32,37 +34,41 @@ struct test_run {
 	int pinning;
 	int id;
 
+	/* How many times to acquire the lock */
+	int iter;
+
 	pid_t tid;
 };
 
-void timeval_substract(struct timespec *result, 
-                  struct timespec *x, 
-                  struct timespec *y)
+void timeval_substract(struct timespec *result, struct timespec *new,
+		struct timespec *old)
 {
-        int nsec;
-        unsigned long long nano = 1000000000;
-  
-        if (x->tv_nsec < y->tv_nsec) {
-                nsec = (y->tv_nsec - x->tv_nsec) / nano + 1;
-                y->tv_nsec -= nano * nsec;
-                y->tv_sec += nsec;
-        }
+	if (new->tv_nsec < old->tv_nsec) {
+		result->tv_sec = new->tv_sec - 1 - old->tv_sec;
+		result->tv_nsec = new->tv_nsec - old->tv_nsec + BILLION;
+	} 
+	else {
+		result->tv_sec = new->tv_sec - old->tv_sec;
+		result->tv_nsec = new->tv_nsec - old->tv_nsec;
+	}
+}
 
-        if (x->tv_nsec - y->tv_nsec > nano) {
-                nsec = (x->tv_nsec - y->tv_nsec) / nano;
-                y->tv_nsec += nano * nsec;
-                y->tv_sec -= nsec;
-        }
+void timeval_accumulate(struct timespec *total, struct timespec *toadd)
+{
+	total->tv_sec += toadd->tv_sec;
+	total->tv_nsec += toadd->tv_nsec;
 
-        result->tv_sec = x->tv_sec - y->tv_sec;
-        result->tv_nsec = x->tv_nsec - y->tv_nsec;
+	if (total->tv_nsec >= BILLION) {
+		total->tv_nsec -= BILLION;
+		total->tv_sec++;
+	}
 }
 
 int compute_percentage(struct test_run *tr, long long int total)
 {
-        long long int part, nano = 1000000000;
-        part  = (tr->tp.tv_sec * nano) + tr->tp.tv_nsec;
-        return ((double)part / total) * 100;
+	long long int part;
+	part = (tr->tp.tv_sec * BILLION) + tr->tp.tv_nsec;
+	return ((double)part / total) * 100;
 }
 
 void __security_check(void)
@@ -106,15 +112,31 @@ int init_lock(int lock_proto, int sum_bys)
 
 /********************* the real code *******************/
 
-void bystander_stuff(void)
+void bystander_stuff(struct test_run *tr, struct timespec *aux_time,
+		struct timespec *start, struct timespec *end)
 {
 	int s;
+	tr->iter = 0;
 
-	/* Loop until the highest priority thread acquires the lock */
-	while (!highest_acquired) {
+	while (1) {
+		clock_gettime(CLOCK_THREAD_CPUTIME_ID, start);
 		/* Chill... */
-		for (s = 0; s < 1000000000; s++){
-			asm(""); /* Avoids GCC optimizations */
+		for (s = 0; s < 10000; s++) {
+			asm("");
+		}
+
+		/* if the lowest has the lock, measure time and iterations. 
+		 * Otherwise, we stop counting */
+		if (lowest_acquired) {
+			clock_gettime(CLOCK_THREAD_CPUTIME_ID, end);
+			tr->iter++;
+
+			timeval_substract(aux_time, end, start);
+			timeval_accumulate(&tr->tp, aux_time);
+		}
+
+		if (done) {
+			break;
 		}
 	}
 }
@@ -122,87 +144,94 @@ void bystander_stuff(void)
 void *thread_func(void *vargp) 
 {
 	struct test_run *tr = (struct test_run*)vargp;
-	struct timespec start, aux_time;
-	int rc, s = 0, m = 0;
+	struct timespec start, end, aux_time;
+	int rc, s, m = 0, i;
 
+	/* Sanity init */
+	tr->tp.tv_sec = 0;
+	tr->tp.tv_nsec = 0;
 	tr->tid = gettid();
+
 	if (setpriority(PRIO_PROCESS, tr->tid, tr->priority) == -1 ){
 		errExit("Error setting the thread priority");
 	}
 
-	/* Wait for all threads to start */
+	/* Wait for all threads before beginning next iteration */
 	rc = pthread_barrier_wait(&barrier);
-
+	
 	if (rc != PTHREAD_BARRIER_SERIAL_THREAD && rc != 0) {
 		errExit("pthread barrier error");
 	}
 
 	/* If this is a bystander thread... */
 	if (tr->id != HIGH_PRIO_CPU && tr->id != LOW_PRIO_CPU) {
+		LOG_DEBUG("Hi it's thread %d\n",tr->id);
+		bystander_stuff(tr, &aux_time, &start, &end);
+	}
+
+	LOG_DEBUG("Hi it's thread %d\n",tr->id);
+
+	for (i = 0; i < tr->iter; i++) {
+
+		/* Measure how long this thread has the lock */
+		our_lock->lock();
+
+		if (tr->id == 0) {
+			if (setpriority(PRIO_PROCESS, tr->tid, LOWEST_PRIO) == -1) {
+				errExit("Error setting the thread priority");
+			}
+		}
+	
+		if (tr->id == LOW_PRIO_CPU) {
+			lowest_acquired = 1;
+		}
+		
 		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
-		bystander_stuff();
-		goto out;
+
+		/* #####################  CRITICAL SECTION ################# */
+
+		/* Let's make the time gap more obvious */
+		m = (tr->id == 0) ? BILLION : 1000;
+
+		for (s = 0; s < m; s++){
+			asm(""); /* Avoids GCC optimizations */
+		}
+
+		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end);
+		
+		if (tr->id == LOW_PRIO_CPU) {
+			if (setpriority(PRIO_PROCESS, tr->tid, HIGHEST_PRIO) == -1) {
+				errExit("Error setting the thread priority");
+			}
+		
+			lowest_acquired = 0;
+		}
+
+		our_lock->unlock();
+
+		timeval_substract(&aux_time, &end, &start);
+
+		/* Compute time spent in CS, add to total time for this thread */
+		timeval_accumulate(&tr->tp, &aux_time);
 	}
 
-try_again:
-
-	/* Force the first thread (the lowest prio if !flags) acquire first  */
-	if (tr->id != 0 && !lowest_acquired){
-		asm("");
-		goto try_again;
-	}
-
-	/* Measure how long this thread has the lock */
-	our_lock->lock();
-
-	/* Highest priority thread acquired the lock */
-	if (tr->id == 1) {
-		highest_acquired = 1;
-	}
-
-	/* #####################  CRITICAL SECTION ######################### */
-
-	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
-
-	/* If we set this for every thread, we don't need an atomic flag     */
-	lowest_acquired = 1;
-
-	/* Let's make the time gap more obvious */
-	for (; s < 1000000; s++){
-		asm(""); /* Avoids GCC optimizations */
-	}
-
-	our_lock->unlock();
-
-out:
-	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tr->tp);
-
-	timeval_substract(&aux_time,&tr->tp,&start);
-
-	if (aux_time.tv_sec > 0){
-		tr->tp.tv_sec  = aux_time.tv_sec;
-	}
-	else {
-		tr->tp.tv_sec = 0;
-	}
-
-	tr->tp.tv_nsec = aux_time.tv_nsec;
+	done = 1;
 
 	return (void*)tr;
 }
 
 int main(int argc, char *argv[])
 {
-	int opt, ncpu = get_nprocs(), thread_count = ncpu, flags = 0, is_cb2=0;
+	int opt, ncpu = get_nprocs(), thread_count = 3, flags = 0, is_cb2 = 0,
+		iter = 1;
 	pthread_t *threads;
 	pthread_attr_t thread_attr;
-	struct test_run *tr, *collection_tr;
-	/* bench_time is for the execution of all threads and total_time
-           is the sum of per-thread CPU time.
-	*/
+	struct test_run *tr, **collection_tr;
+	/* bench_time is for the execution of all threads and total_time is the sum
+	 * of per-thread CPU time. */
 	struct timespec start_bench, end_bench, total_time, bench_time;
 	cpu_set_t cpuset;
-        long long int total, nano = 1000000000;
+	long long int total;
 	time_t t;
 	register int i;
 	int sum_bys = 0;
@@ -211,7 +240,7 @@ int main(int argc, char *argv[])
 		errExit("This benchmark requires at least 2 cores to run\n");
 	}
 	
-	while ((opt = getopt(argc, argv, "hn:p:")) != -1) {
+	while ((opt = getopt(argc, argv, "hn:p:i:")) != -1) {
 		switch (opt) {
 			case 'h':
 				printf("Usage: %s [-n nthreads]\n",argv[0]);
@@ -233,6 +262,12 @@ int main(int argc, char *argv[])
 				}
 				else {
 					is_cb2 = 1;
+				}
+				break;
+			case 'i':
+				iter = atoi(optarg);
+				if (iter < 1){
+					errExit("You need at least one iteration...");
 				}
 				break;
 			default:
@@ -277,15 +312,16 @@ int main(int argc, char *argv[])
 	}
 
 	/* Allocate memory for the array of test run */
-	if (!(collection_tr = calloc(thread_count, sizeof(struct test_run)))){
+	if (!(collection_tr = calloc(thread_count, sizeof(struct test_run*)))){
 		errExit("Could not calloc collection_tr");
 	}
 
 	/* #### Create the threads and assign their priorities. ################# */
 
-	clock_gettime(CLOCK_MONOTONIC, &start_bench);
+	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_bench);
 
-	printf("\nExperiment with %d threads,",thread_count);
+	printf("\nExperiment with lock %s\n%d threads and %d iterations,", 
+		our_lock->description, thread_count, iter);
 	
 	if (flags){
 		printf(" all threads with same priority.\n");
@@ -305,26 +341,31 @@ int main(int argc, char *argv[])
 
 		/* Set priorities and CPU affinity based on thread number */
 		tr->id = i;
-		tr->pinning = HIGH_PRIO_CPU;
+		tr->pinning = LOW_PRIO_CPU;
+		tr->iter = iter;
 
 		if (i == LOW_PRIO_CPU) {
-			tr->priority = LOWEST_PRIO;
-			tr->pinning = LOW_PRIO_CPU;
+			/* In order to allow the test to make progress accross iterations,
+			 * we set the low priority thread to highest priority until it grabs
+			 * the lock and allows the actual high priority thread to continue.
+			 * */
+			tr->priority = HIGHEST_PRIO;
 		} 
 		else if (i == HIGH_PRIO_CPU) {
 			tr->priority = HIGHEST_PRIO;
-		} else {
-			/* This thread is a bystander, and his location and 
-		           priority level will be random, but in between the high
-		           and the low priority threads (-20,19)
-			*/
+			tr->pinning = HIGH_PRIO_CPU;
+		} 
+		else {
+			/* This thread is a bystander, and his location and priority level
+			 * will be random, but in between the high and the low priority
+			 * threads (-20,19) */
 			tr->priority = rand() % 37;
 			
 			/* Get values between -1 and -19 */ 
 			if (tr->priority > 18){
 				tr->priority = 0 - tr->priority + 18 ;
 			}
-			
+
 			if (is_cb2){
 				sum_bys += tr->priority;
 			}
@@ -340,9 +381,9 @@ int main(int argc, char *argv[])
 		}
 
 		if (!is_cb2){
-		   if (pthread_create(&threads[i], &thread_attr, thread_func, tr) != 0) {
-			errExit("Could not create thread");
-		   }
+			if (pthread_create(&threads[i], &thread_attr, thread_func, tr) != 0) {
+				errExit("Could not create thread");
+			}
 		}
 	}
 
@@ -351,9 +392,9 @@ int main(int argc, char *argv[])
 		init_lock(RT_CB2,sum_bys);	
 
 		for (i = 0; i < thread_count; ++i) {
-		   if (pthread_create(&threads[i], &thread_attr, thread_func, tr) != 0) {
-			errExit("Could not create thread");
-		   }
+			if (pthread_create(&threads[i], &thread_attr, thread_func, tr) != 0) {
+				errExit("Could not create thread");
+			}
 		}
 	}
 
@@ -367,34 +408,33 @@ int main(int argc, char *argv[])
 		if (pthread_join(threads[i], (void**)&tr) != 0) {
 			errExit("Could not join thread");
 		}
-		
-		total_time.tv_nsec  += tr->tp.tv_nsec;	
-		total_time.tv_sec  += tr->tp.tv_sec;
 
-		collection_tr[i].tp.tv_sec  = tr->tp.tv_sec;
-		collection_tr[i].tp.tv_nsec = tr->tp.tv_nsec;
-		collection_tr[i].priority   = tr->priority;
-		collection_tr[i].pinning    = tr->pinning;
+		timeval_accumulate(&total_time, &tr->tp);
+
+		collection_tr[i] = tr;
 	}
 
-	total = total_time.tv_sec * nano + total_time.tv_nsec; 
+	total = total_time.tv_sec * BILLION + total_time.tv_nsec; 
 	
 	for (i = 0; i < thread_count; ++i){
 
-		tr = &collection_tr[i];
+		tr = collection_tr[i];
 
-		printf("Thread: %d\tPriority: %d\tCPU affinity: %d\tCPU time: %d:%09d\tCPU%: %d\n",
-				i, tr->priority, tr->pinning, tr->tp.tv_sec, tr->tp.tv_nsec,
-				compute_percentage(tr,total));
+		printf("Thread: %d\tPrio: %3d\tCPU#: %d\tCPU time: %d:%09d\tCPU%: %3d\tIters: %d\n",
+				i, (i == 0) ? LOWEST_PRIO : tr->priority, tr->pinning,
+				tr->tp.tv_sec, tr->tp.tv_nsec, compute_percentage(tr,total),
+				tr->iter);
 	
+		free(tr);
+		collection_tr[i] = NULL;
 	}
 
 	/* Compute total execution time */
-	clock_gettime(CLOCK_MONOTONIC, &end_bench);
+	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_bench);
 	
-	timeval_substract(&bench_time,&end_bench,&start_bench);
+	timeval_substract(&bench_time, &end_bench, &start_bench);
 
-	printf("Total clock time: %d:%09d\n",
+	printf("Total benchmark time: %d:%09d\n",
 		(long long)bench_time.tv_sec,bench_time.tv_nsec);
 
 	printf("Total threads CPU time: %d:%09d\n",
@@ -404,8 +444,8 @@ int main(int argc, char *argv[])
 	our_lock->destroy();
 	pthread_barrier_destroy(&barrier);
 	free(threads);
-	free(collection_tr);
 	pthread_attr_destroy(&thread_attr);
+	free(collection_tr);
 
 	// See https://stackoverflow.com/questions/48527189/is-there-a-way-to-flush-the-entire-cpu-cache-related-to-a-program?noredirect=1&lq=1
 	// Clear all cache contents

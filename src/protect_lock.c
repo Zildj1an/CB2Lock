@@ -51,7 +51,7 @@ static void _destroy(void) {
 
 runtime_lock protect_lock = {
 	.type         = RT_PROTECT,
-	.description  = "Mutex with ceiling PI",
+	.description  = "ceiling PI",
 	.lock         = _lock,
 	.unlock       = _unlock,
 	.init         = _init,
