@@ -10,17 +10,16 @@ static void _lock(void)
 	pid_t me = gettid();
 
 	original_priority = getpriority(PRIO_PROCESS, me);
-
 	if (original_priority == -1) {
 		errExit("Error getting the thread priority");
 	}
+
+	pthread_mutex_lock(&lock);
 
 	/* Raise priority to ceiling */
 	if (setpriority(PRIO_PROCESS, me, ceiling) == -1) {
 		errExit("Error setting the thread priority");
 	}
-
-	pthread_mutex_lock(&lock);
 }
 
 static void _unlock(void)
