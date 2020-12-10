@@ -19,7 +19,6 @@
 
 /* Control for forcing the scenario we want */
 pthread_barrier_t barrier;
-sem_t lowest_acquired_sem;
 static volatile int lowest_acquired = 0;
 static volatile int done = 0;
 
@@ -163,12 +162,11 @@ void *thread_func(void *vargp)
 
 	/* If this is a bystander thread... */
 	if (tr->id != HIGH_PRIO_CPU && tr->id != LOW_PRIO_CPU) {
-	
-		printf("debug> Hi it's thread %d\n",tr->id);
+		LOG_DEBUG("Hi it's thread %d\n",tr->id);
 		bystander_stuff(tr, &aux_time, &start, &end);
 	}
 
-	printf("debug> Hi it's thread %d\n",tr->id);
+	LOG_DEBUG("Hi it's thread %d\n",tr->id);
 
 	for (i = 0; i < tr->iter; i++) {
 
@@ -293,11 +291,6 @@ int main(int argc, char *argv[])
 		init_lock(RT_NONE);
 	}
 
-	/* Init lowest acquired sem */
-	if (sem_init(&lowest_acquired_sem, 0, 0) != 0) {
-		errExit("Could not init semaphore");
-	}
-
 	/* Set the CFS scheduler (Most likely it already was) */
 	if (pthread_attr_setschedpolicy(&thread_attr, SCHED_NORMAL) != 0) {
 		errExit("Could not set the CFS scheduler");
@@ -400,7 +393,7 @@ int main(int argc, char *argv[])
 
 		tr = collection_tr[i];
 
-		printf("Thread: %d\tPrio: %d\tCPU#: %d\tCPU time: %d:%09d\tCPU%: %02d\tIters: %d\n",
+		printf("Thread: %d\tPrio: %3d\tCPU#: %d\tCPU time: %d:%09d\tCPU%: %3d\tIters: %d\n",
 				i, (i == 0) ? LOWEST_PRIO : tr->priority, tr->pinning,
 				tr->tp.tv_sec, tr->tp.tv_nsec, compute_percentage(tr,total),
 				tr->iter);
@@ -423,7 +416,6 @@ int main(int argc, char *argv[])
 	/* Cleanup */
 	our_lock->destroy();
 	pthread_barrier_destroy(&barrier);
-	sem_destroy(&lowest_acquired_sem);
 	free(threads);
 	pthread_attr_destroy(&thread_attr);
 	free(collection_tr);

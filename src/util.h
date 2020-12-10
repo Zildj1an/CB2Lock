@@ -19,4 +19,10 @@
 
 #define errExit(msg) do { perror(msg); exit(EXIT_FAILURE); } while (0)
 
+#ifdef DEBUG
+#define LOG_DEBUG(msg, ...) printf("DEBUG: " msg, __VA_ARGS__)
+#else
+#define LOG_DEBUG(msg, ...) do {} while(0)
+#endif
+
 #endif
