@@ -8,7 +8,7 @@
 #include "runtime_lock.h"
 #include "util.h"
 
-#define __APPLY_MAP_K__
+//#define __APPLY_MAP_K__
 
 #ifdef __APPLY_MAP_K__
 #include "map.h"
@@ -69,7 +69,9 @@ int cb2_lock_inversion(int HP_prio, pid_t HP_pid)
 		ret = 1;
 	} 
 	else {
+#ifdef __APPLY_MAP_K__
 		map_decrease(HP_pid);
+#endif
 	}
 	
 	return ret;
@@ -193,7 +195,7 @@ static void cb2_destroy(void)
 
 runtime_lock CB2_lock = {
 	.type         = RT_CB2,
-	.description  = "Mutex with CB2Lock fair lottery invesion",
+	.description  = "Mutex with CB2Lock",
 	.lock         = cb2_lock,
 	.unlock       = cb2_unlock,
 	.init         = cb2_init,

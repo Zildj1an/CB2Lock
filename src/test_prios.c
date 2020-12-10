@@ -121,7 +121,7 @@ void bystander_stuff(struct test_run *tr, struct timespec *aux_time,
 	while (1) {
 		clock_gettime(CLOCK_THREAD_CPUTIME_ID, start);
 		/* Chill... */
-		for (s = 0; s < 10000; s++) {
+		for (s = 0; s < 1000; s++) {
 			asm("");
 		}
 
@@ -167,6 +167,7 @@ void *thread_func(void *vargp)
 	if (tr->id != HIGH_PRIO_CPU && tr->id != LOW_PRIO_CPU) {
 		LOG_DEBUG("Hi it's thread %d\n",tr->id);
 		bystander_stuff(tr, &aux_time, &start, &end);
+		goto out;
 	}
 
 	LOG_DEBUG("Hi it's thread %d\n",tr->id);
@@ -176,12 +177,17 @@ void *thread_func(void *vargp)
 		/* Measure how long this thread has the lock */
 		our_lock->lock();
 
-		if (tr->id == 0) {
-			if (setpriority(PRIO_PROCESS, tr->tid, LOWEST_PRIO) == -1) {
-				errExit("Error setting the thread priority");
+		/* We want to set the priority low only after we grab the lock. However,
+		 * for the ceiling lock, it undoes the priority fixing, so we have to
+		 * hack around that. */
+		if (our_lock->type != RT_PROTECT) {
+			if (tr->id == 0) {
+				if (setpriority(PRIO_PROCESS, tr->tid, LOWEST_PRIO) == -1) {
+					errExit("Error setting the thread priority");
+				}
 			}
 		}
-	
+
 		if (tr->id == LOW_PRIO_CPU) {
 			lowest_acquired = 1;
 		}
@@ -191,8 +197,7 @@ void *thread_func(void *vargp)
 		/* #####################  CRITICAL SECTION ################# */
 
 		/* Let's make the time gap more obvious */
-		m = (tr->id == 0) ? BILLION : 1000;
-
+		m = BILLION;
 		for (s = 0; s < m; s++){
 			asm(""); /* Avoids GCC optimizations */
 		}
@@ -217,6 +222,7 @@ void *thread_func(void *vargp)
 
 	done = 1;
 
+out:
 	return (void*)tr;
 }
 
@@ -321,7 +327,7 @@ int main(int argc, char *argv[])
 	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_bench);
 
 	printf("\nExperiment with lock %s\n%d threads and %d iterations,", 
-		our_lock->description, thread_count, iter);
+		(is_cb2) ? "CB2Lock" : our_lock->description, thread_count, iter);
 	
 	if (flags){
 		printf(" all threads with same priority.\n");
@@ -380,23 +386,16 @@ int main(int argc, char *argv[])
 			errExit("Could not set thread affinity");
 		}
 
-		if (!is_cb2){
-			if (pthread_create(&threads[i], &thread_attr, thread_func, tr) != 0) {
-				errExit("Could not create thread");
-			}
+		/* init the lock before the threads go off and party */
+		if (is_cb2 && i == thread_count - 1) {
+			init_lock(RT_CB2,sum_bys);
+		}
+
+		if (pthread_create(&threads[i], &thread_attr, thread_func, tr) != 0) {
+			errExit("Could not create thread");
 		}
 	}
 
-	if (is_cb2){
-
-		init_lock(RT_CB2,sum_bys);	
-
-		for (i = 0; i < thread_count; ++i) {
-			if (pthread_create(&threads[i], &thread_attr, thread_func, tr) != 0) {
-				errExit("Could not create thread");
-			}
-		}
-	}
 
 	/* ############ Join and process results ########################### */
 
