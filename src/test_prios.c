@@ -108,7 +108,7 @@ void bystander_stuff(void)
 	/* Loop until the highest priority thread acquires the lock */
 	while (!highest_acquired) {
 		/* Chill... */
-		for (s = 0; s < 100; s++){
+		for (s = 0; s < 1000000000; s++){
 			asm(""); /* Avoids GCC optimizations */
 		}
 	}
