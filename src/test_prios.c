@@ -3,7 +3,7 @@
 # Microbenchmark to test the fairness of Priority Inversion on scenarios with #
 # low-priority threads acquiring the lock first, between current proposals    #
 # and our mutex CB2Lock.                                                      #
-#									      #
+#                                                                             #
 # Authors: Christopher Blackburn, Carlos Bilbao (2020)                        #
 ###############################################################################
 */
@@ -19,7 +19,8 @@
 
 /* Control for forcing the scenario we want */
 pthread_barrier_t barrier;
-sem_t lowest_acquired;
+sem_t lowest_acquired_sem;
+static volatile int lowest_acquired = 0;
 static volatile int done = 0;
 
 /* Our lock, that will be of the type specified at runtime */
@@ -107,11 +108,32 @@ int init_lock(int lock_proto)
 
 /********************* the real code *******************/
 
-void bystander_stuff(struct test_run *tr)
+void bystander_stuff(struct test_run *tr, struct timespec *aux_time,
+		struct timespec *start, struct timespec *end)
 {
 	int s;
-	for (s = 0; s < BILLION; s++){
-		asm(""); /* Avoids GCC optimizations */
+	tr->iter = 0;
+
+	while (1) {
+		clock_gettime(CLOCK_THREAD_CPUTIME_ID, start);
+		/* Chill... */
+		for (s = 0; s < 10000; s++) {
+			asm("");
+		}
+
+		/* if the lowest has the lock, measure time and iterations. Otherwise,
+		 * we stop counting */
+		if (lowest_acquired) {
+			clock_gettime(CLOCK_THREAD_CPUTIME_ID, end);
+			tr->iter++;
+
+			timeval_substract(aux_time, end, start);
+			timeval_accumulate(&tr->tp, aux_time);
+		}
+
+		if (done) {
+			break;
+		}
 	}
 }
 
@@ -125,41 +147,47 @@ void *thread_func(void *vargp)
 	tr->tp.tv_sec = 0;
 	tr->tp.tv_nsec = 0;
 
+	/* Wait for all threads before beginning next iteration */
+	rc = pthread_barrier_wait(&barrier);
+	if (rc != PTHREAD_BARRIER_SERIAL_THREAD && rc != 0) {
+		errExit("pthread barrier error");
+	}
+
 	tr->tid = gettid();
 	if (setpriority(PRIO_PROCESS, tr->tid, tr->priority) == -1 ){
 		errExit("Error setting the thread priority");
 	}
 
+	/* If this is a bystander thread... */
+	if (tr->id != HIGH_PRIO_CPU && tr->id != LOW_PRIO_CPU) {
+		bystander_stuff(tr, &aux_time, &start, &end);
+		goto out;
+	}
+
 	for (i = 0; i < tr->iter; i++) {
-		/* Wait for all threads before beginning next iteration */
-		rc = pthread_barrier_wait(&barrier);
-		if (rc != PTHREAD_BARRIER_SERIAL_THREAD && rc != 0) {
-			errExit("pthread barrier error");
-		}
-
-		/* If this is a bystander thread... */
-		if (tr->id != HIGH_PRIO_CPU && tr->id != LOW_PRIO_CPU) {
-			clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
-			bystander_stuff(tr);
-			goto end_iter;
-		}
-
 		/* Force preferential treatment by letting the low priority thread
 		 * acquire the lock first */
 		if (tr->id != 0) {
-			sem_wait(&lowest_acquired);
+			//sem_wait(&lowest_acquired_sem);
 		}
 
 		/* Measure how long this thread has the lock */
 		our_lock->lock();
+		lowest_acquired = 1;
 
-		/* #####################  CRITICAL SECTION ######################### */
-		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
+		if (tr->id == 0) {
+			if (setpriority(PRIO_PROCESS, tr->tid, LOWEST_PRIO) == -1) {
+				errExit("Error setting the thread priority");
+			}
+		}
 
 		/* we are about to let go of the lock */
 		if (tr->id == 0) {
-			sem_post(&lowest_acquired);
+			//sem_post(&lowest_acquired_sem);
 		}
+
+		/* #####################  CRITICAL SECTION ######################### */
+		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
 
 		/* Let's make the time gap more obvious */
 		m = (tr->id == 0) ? BILLION : 1000;
@@ -167,9 +195,15 @@ void *thread_func(void *vargp)
 			asm(""); /* Avoids GCC optimizations */
 		}
 
+		lowest_acquired = 0;
 		our_lock->unlock();
 
-end_iter:
+		if (tr->id == 0) {
+			if (setpriority(PRIO_PROCESS, tr->tid, HIGHEST_PRIO) == -1) {
+				errExit("Error setting the thread priority");
+			}
+		}
+
 		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end);
 		timeval_substract(&aux_time, &end, &start);
 
@@ -177,6 +211,9 @@ end_iter:
 		timeval_accumulate(&tr->tp, &aux_time);
 	}
 
+	done = 1;
+
+out:
 	return (void*)tr;
 }
 
@@ -255,7 +292,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* Init lowest acquired sem */
-	if (sem_init(&lowest_acquired, 0, 1) != 0) {
+	if (sem_init(&lowest_acquired_sem, 0, 0) != 0) {
 		errExit("Could not init semaphore");
 	}
 
@@ -278,7 +315,7 @@ int main(int argc, char *argv[])
 
 	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_bench);
 
-	printf("\nExperiment with %d threads and %d iterations,", thread_count, iter);
+	printf("\nExperiment with lock %s\n%d threads and %d iterations,", our_lock->description, thread_count, iter);
 	
 	if (flags){
 		printf(" all threads with same priority.\n");
@@ -298,15 +335,18 @@ int main(int argc, char *argv[])
 
 		/* Set priorities and CPU affinity based on thread number */
 		tr->id = i;
-		tr->pinning = HIGH_PRIO_CPU;
+		tr->pinning = LOW_PRIO_CPU;
 		tr->iter = iter;
 
 		if (i == LOW_PRIO_CPU) {
-			tr->priority = LOWEST_PRIO;
-			tr->pinning = LOW_PRIO_CPU;
+			/* In order to allow the test to make progress accross iterations, we set
+			 * the low priority thread to highest priority until it grabs the lock and
+			 * allows the actual high priority thread to continue. */
+			tr->priority = HIGHEST_PRIO;
 		} 
 		else if (i == HIGH_PRIO_CPU) {
 			tr->priority = HIGHEST_PRIO;
+			tr->pinning = HIGH_PRIO_CPU;
 		} else {
 			/* This thread is a bystander, and his location and 
 		           priority level will be random, but in between the high
@@ -319,7 +359,7 @@ int main(int argc, char *argv[])
 				tr->priority = 0 - tr->priority + 18 ;
 			}
 
-			tr->pinning = rand() % 1;
+			//tr->pinning = rand() % 1;
 		}
 
 		CPU_ZERO(&cpuset);
@@ -357,8 +397,9 @@ int main(int argc, char *argv[])
 		tr = collection_tr[i];
 
 		printf("Thread: %d\tPriority: %d\tCPU affinity: %d\tCPU time: %d:%09d\tCPU%: %02d\tIterations: %d\n",
-				i, tr->priority, tr->pinning, tr->tp.tv_sec, tr->tp.tv_nsec,
-				compute_percentage(tr,total), tr->iter);
+				i, (i == 0) ? LOWEST_PRIO : tr->priority, tr->pinning,
+				tr->tp.tv_sec, tr->tp.tv_nsec, compute_percentage(tr,total),
+				tr->iter);
 	
 		free(tr);
 		collection_tr[i] = NULL;
@@ -378,7 +419,7 @@ int main(int argc, char *argv[])
 	/* Cleanup */
 	our_lock->destroy();
 	pthread_barrier_destroy(&barrier);
-	sem_destroy(&lowest_acquired);
+	sem_destroy(&lowest_acquired_sem);
 	free(threads);
 	pthread_attr_destroy(&thread_attr);
 	free(collection_tr);
