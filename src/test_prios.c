@@ -110,15 +110,8 @@ int init_lock(int lock_proto)
 void bystander_stuff(struct test_run *tr)
 {
 	int s;
-	tr->iter = 0;
-
-	/* Loop until the highest priority thread acquires the lock */
-	while (!done) {
-		tr->iter++;
-		/* Chill... */
-		for (s = 0; s < BILLION; s++){
-			asm(""); /* Avoids GCC optimizations */
-		}
+	for (s = 0; s < BILLION; s++){
+		asm(""); /* Avoids GCC optimizations */
 	}
 }
 
@@ -137,26 +130,20 @@ void *thread_func(void *vargp)
 		errExit("Error setting the thread priority");
 	}
 
-	/* Wait for all threads to start */
-	rc = pthread_barrier_wait(&barrier);
-
-	if (rc != PTHREAD_BARRIER_SERIAL_THREAD && rc != 0) {
-		errExit("pthread barrier error");
-	}
-
-	/* If this is a bystander thread... */
-	if (tr->id != HIGH_PRIO_CPU && tr->id != LOW_PRIO_CPU) {
-		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
-		bystander_stuff(tr);
-		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end);
-
-		/* calclate time spent */
-		timeval_substract(&tr->tp, &end, &start);
-		goto out;
-	}
-
-	/* If this is not a bystander thread... */
 	for (i = 0; i < tr->iter; i++) {
+		/* Wait for all threads before beginning next iteration */
+		rc = pthread_barrier_wait(&barrier);
+		if (rc != PTHREAD_BARRIER_SERIAL_THREAD && rc != 0) {
+			errExit("pthread barrier error");
+		}
+
+		/* If this is a bystander thread... */
+		if (tr->id != HIGH_PRIO_CPU && tr->id != LOW_PRIO_CPU) {
+			clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
+			bystander_stuff(tr);
+			goto end_iter;
+		}
+
 		/* Force preferential treatment by letting the low priority thread
 		 * acquire the lock first */
 		if (tr->id != 0) {
@@ -175,12 +162,14 @@ void *thread_func(void *vargp)
 		}
 
 		/* Let's make the time gap more obvious */
-		for (s = 0; s < BILLION; s++){
+		m = (tr->id == 0) ? BILLION : 1000;
+		for (s = 0; s < m; s++){
 			asm(""); /* Avoids GCC optimizations */
 		}
 
 		our_lock->unlock();
 
+end_iter:
 		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end);
 		timeval_substract(&aux_time, &end, &start);
 
@@ -188,16 +177,12 @@ void *thread_func(void *vargp)
 		timeval_accumulate(&tr->tp, &aux_time);
 	}
 
-	/* Signal bystander threads that we are done with the experiment */
-	done = 1;
-
-out:
 	return (void*)tr;
 }
 
 int main(int argc, char *argv[])
 {
-	int i, opt, ncpu = get_nprocs(), thread_count = ncpu, flags = 0, iter = 1;
+	int i, opt, ncpu = get_nprocs(), thread_count = 3, flags = 0, iter = 1;
 	pthread_t *threads;
 	pthread_attr_t thread_attr;
 	struct test_run *tr, **collection_tr;
