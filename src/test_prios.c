@@ -47,7 +47,8 @@ void timeval_substract(struct timespec *result, struct timespec *new,
 	if (new->tv_nsec < old->tv_nsec) {
 		result->tv_sec = new->tv_sec - 1 - old->tv_sec;
 		result->tv_nsec = new->tv_nsec - old->tv_nsec + BILLION;
-	} else {
+	} 
+	else {
 		result->tv_sec = new->tv_sec - old->tv_sec;
 		result->tv_nsec = new->tv_nsec - old->tv_nsec;
 	}
@@ -57,6 +58,7 @@ void timeval_accumulate(struct timespec *total, struct timespec *toadd)
 {
 	total->tv_sec += toadd->tv_sec;
 	total->tv_nsec += toadd->tv_nsec;
+
 	if (total->tv_nsec >= BILLION) {
 		total->tv_nsec -= BILLION;
 		total->tv_sec++;
@@ -121,8 +123,8 @@ void bystander_stuff(struct test_run *tr, struct timespec *aux_time,
 			asm("");
 		}
 
-		/* if the lowest has the lock, measure time and iterations. Otherwise,
-		 * we stop counting */
+		/* if the lowest has the lock, measure time and iterations. 
+		 * Otherwise, we stop counting */
 		if (lowest_acquired) {
 			clock_gettime(CLOCK_THREAD_CPUTIME_ID, end);
 			tr->iter++;
@@ -146,65 +148,66 @@ void *thread_func(void *vargp)
 	/* Sanity init */
 	tr->tp.tv_sec = 0;
 	tr->tp.tv_nsec = 0;
-
-	/* Wait for all threads before beginning next iteration */
-	rc = pthread_barrier_wait(&barrier);
-	if (rc != PTHREAD_BARRIER_SERIAL_THREAD && rc != 0) {
-		errExit("pthread barrier error");
-	}
-
 	tr->tid = gettid();
+
 	if (setpriority(PRIO_PROCESS, tr->tid, tr->priority) == -1 ){
 		errExit("Error setting the thread priority");
 	}
 
-	/* If this is a bystander thread... */
-	if (tr->id != HIGH_PRIO_CPU && tr->id != LOW_PRIO_CPU) {
-		bystander_stuff(tr, &aux_time, &start, &end);
-		goto out;
+	/* Wait for all threads before beginning next iteration */
+	rc = pthread_barrier_wait(&barrier);
+	
+	if (rc != PTHREAD_BARRIER_SERIAL_THREAD && rc != 0) {
+		errExit("pthread barrier error");
 	}
 
+	/* If this is a bystander thread... */
+	if (tr->id != HIGH_PRIO_CPU && tr->id != LOW_PRIO_CPU) {
+	
+		printf("hola desde thread %d\n",tr->id);
+		bystander_stuff(tr, &aux_time, &start, &end);
+	}
+
+	printf("hola desde thread %d\n",tr->id);
+
 	for (i = 0; i < tr->iter; i++) {
-		/* Force preferential treatment by letting the low priority thread
-		 * acquire the lock first */
-		if (tr->id != 0) {
-			//sem_wait(&lowest_acquired_sem);
-		}
 
 		/* Measure how long this thread has the lock */
 		our_lock->lock();
-		lowest_acquired = 1;
 
 		if (tr->id == 0) {
 			if (setpriority(PRIO_PROCESS, tr->tid, LOWEST_PRIO) == -1) {
 				errExit("Error setting the thread priority");
 			}
 		}
-
-		/* we are about to let go of the lock */
-		if (tr->id == 0) {
-			//sem_post(&lowest_acquired_sem);
+	
+		if (tr->id == LOW_PRIO_CPU) {
+			lowest_acquired = 1;
 		}
-
-		/* #####################  CRITICAL SECTION ######################### */
+		
 		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
+
+		/* #####################  CRITICAL SECTION ################# */
 
 		/* Let's make the time gap more obvious */
 		m = (tr->id == 0) ? BILLION : 1000;
+
 		for (s = 0; s < m; s++){
 			asm(""); /* Avoids GCC optimizations */
 		}
 
-		lowest_acquired = 0;
-		our_lock->unlock();
-
-		if (tr->id == 0) {
-			if (setpriority(PRIO_PROCESS, tr->tid, HIGHEST_PRIO) == -1) {
+		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end);
+		
+		if (tr->id == LOW_PRIO_CPU) {
+		   if (setpriority(PRIO_PROCESS, tr->tid, HIGHEST_PRIO) == -1) {
 				errExit("Error setting the thread priority");
-			}
+		    }
+		
+		    lowest_acquired = 0;
 		}
 
-		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &end);
+		our_lock->unlock();
+
 		timeval_substract(&aux_time, &end, &start);
 
 		/* Compute time spent in CS, add to total time for this thread */
@@ -213,7 +216,6 @@ void *thread_func(void *vargp)
 
 	done = 1;
 
-out:
 	return (void*)tr;
 }
 
@@ -315,7 +317,8 @@ int main(int argc, char *argv[])
 
 	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_bench);
 
-	printf("\nExperiment with lock %s\n%d threads and %d iterations,", our_lock->description, thread_count, iter);
+	printf("\nExperiment with lock %s\n%d threads and %d iterations,", 
+		our_lock->description, thread_count, iter);
 	
 	if (flags){
 		printf(" all threads with same priority.\n");
@@ -347,7 +350,8 @@ int main(int argc, char *argv[])
 		else if (i == HIGH_PRIO_CPU) {
 			tr->priority = HIGHEST_PRIO;
 			tr->pinning = HIGH_PRIO_CPU;
-		} else {
+		} 
+		else {
 			/* This thread is a bystander, and his location and 
 		           priority level will be random, but in between the high
 		           and the low priority threads (-20,19)
@@ -359,7 +363,7 @@ int main(int argc, char *argv[])
 				tr->priority = 0 - tr->priority + 18 ;
 			}
 
-			//tr->pinning = rand() % 1;
+			tr->iter = 0;
 		}
 
 		CPU_ZERO(&cpuset);
@@ -396,7 +400,7 @@ int main(int argc, char *argv[])
 
 		tr = collection_tr[i];
 
-		printf("Thread: %d\tPriority: %d\tCPU affinity: %d\tCPU time: %d:%09d\tCPU%: %02d\tIterations: %d\n",
+		printf("Thread: %d\tPrio: %d\tCPU#: %d\tCPU time: %d:%09d\tCPU%: %02d\tIters: %d\n",
 				i, (i == 0) ? LOWEST_PRIO : tr->priority, tr->pinning,
 				tr->tp.tv_sec, tr->tp.tv_nsec, compute_percentage(tr,total),
 				tr->iter);

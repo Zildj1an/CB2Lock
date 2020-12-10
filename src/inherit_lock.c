@@ -106,7 +106,7 @@ static void _destroy(void) {
 
 runtime_lock inherit_lock = {
 	.type         = RT_INHERIT,
-	.description  = "Mutex with inherit PI",
+	.description  = "inherit PI",
 	.lock         = _lock,
 	.unlock       = _unlock,
 	.init         = _init,

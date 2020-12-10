@@ -24,7 +24,7 @@ static void _destroy(void) {
 
 runtime_lock mutex_lock = {
 	.type        = RT_NONE,
-	.description = "Normal pthread mutex",
+	.description = "normal pthread mutex",
 	.lock        = _lock,
 	.unlock      = _unlock,
 	.init        = _init,
