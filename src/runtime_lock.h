@@ -24,8 +24,7 @@ typedef struct _runtime_lock_attr {
 
 		/* CB2 */
 		struct {
-			int sum_tickets;
-			// TODO lock owner
+			int by_tickets_cpu;
 		};
 	};
 } runtime_lock_attr;
