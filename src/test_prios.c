@@ -58,14 +58,14 @@ void timeval_substract(struct timespec *result,
         result->tv_nsec = x->tv_nsec - y->tv_nsec;
 }
 
-int compute_percentage(struct test_run *tr, long long int total)
+int inline compute_percentage(struct test_run *tr, long long int total)
 {
         long long int part, nano = 1000000000;
         part  = (tr->tp.tv_sec * nano) + tr->tp.tv_nsec;
         return ((double)part / total) * 100;
 }
 
-void __security_check(void)
+void inline __security_check(void)
 {
 	assert(our_lock->lock && "You need to implement a lock function buddy");
 	assert(our_lock->unlock && "I don't see any unlock in your lock...");
@@ -190,7 +190,7 @@ out:
 
 int main(int argc, char *argv[])
 {
-	int i, opt, ncpu = get_nprocs(), thread_count = ncpu, flags = 0;
+	int opt, ncpu = get_nprocs(), thread_count = ncpu, flags = 0;
 	pthread_t *threads;
 	pthread_attr_t thread_attr;
 	struct test_run *tr, *collection_tr;
@@ -201,6 +201,7 @@ int main(int argc, char *argv[])
 	cpu_set_t cpuset;
         long long int total, nano = 1000000000;
 	time_t t;
+	register int i;
 
 	if (ncpu < 2) {
 		errExit("This benchmark requires at least 2 cores to run\n");

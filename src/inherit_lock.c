@@ -4,8 +4,8 @@
 /* To implement priority inheritance, we used two locks. One represents the lock
  * for the critical section, while the other locks metadata for setting and
  * updating priorities. Linux implements this a bit differently, but we used
- * this approach for simplicity's sake (see pi-futex.txt in linux kernel
- * documentation for more information on priority inversion techniques in the
+ * this approach for simplicity's sake (see pi-futex.txt in Linux kernel
+ * Documentation for more information on Priority Inversion techniques in the
  * kernel). Note that in both implementations, the coordination required to
  * safely handle getting/setting priority levels of threads makes the unlock
  * method no longer wait-free. */
@@ -22,6 +22,7 @@ static void _lock(void)
 	int rc, owner_priority;
 
 	original_priority = getpriority(PRIO_PROCESS, me);
+
 	if (original_priority == -1) {
 		errExit("Error getting the thread priority");
 	}
@@ -34,11 +35,13 @@ static void _lock(void)
 		/* We acquired the lock. Set metadata and continue into CS */
 		owner_tid = me;
 		pthread_mutex_unlock(&meta_lock);
-	} else if (rc == EBUSY) {
+	} 
+	else if (rc == EBUSY) {
 		/* We did not acquire the lock. Update owner priority to speed things up
 		 * a bit. */
 		assert(owner_tid != -1);
 		owner_priority = getpriority(PRIO_PROCESS, owner_tid);
+	
 		if (original_priority == -1) {
 			errExit("Error getting the owner priority");
 		}
@@ -60,7 +63,8 @@ static void _lock(void)
 		pthread_mutex_lock(&meta_lock);
 		owner_tid = me;
 		pthread_mutex_unlock(&meta_lock);
-	} else {
+	} 
+	else {
 		errExit("something went terribly wrong when we tried to get a lock...");
 	}
 }
@@ -94,7 +98,8 @@ static void _init(__attribute__((unused)) runtime_lock_attr *attr)
 	}
 }
 
-static void _destroy(void) {
+static void _destroy(void) 
+{
 	int rc = 0;
 	rc |= pthread_mutex_destroy(&lock);
 	rc |= pthread_mutex_destroy(&meta_lock);

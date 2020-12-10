@@ -22,9 +22,8 @@ function disable_hyp {
 	stress --cpu 8 --io 1 --vm 1 --vm-bytes 128M --timeout 10s
 }
 
-echo "-----------------------------------------------"
-echo " LOG OF EXECUTION $(date +"%x %r") "
-echo "-----------------------------------------------"
+# sudo apt install cowsay figlet toilet
+cowsay -f tux 'CB2Lock microbenchmark '$(date +"%x %r") | toilet --metal -f term 
 
 # Disable hyperthreading
 disable_hyp &> /dev/null
