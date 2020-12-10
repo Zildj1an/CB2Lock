@@ -1,4 +1,3 @@
-#pragma once
 #ifndef __RUNTIME_H_
 #define __RUNTIME_H_
 
