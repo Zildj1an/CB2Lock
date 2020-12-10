@@ -1,11 +1,22 @@
+/*
+  ##################################################################
+  #  This is the first version of the CB2Lock.                     #
+  #  Authors Christopher Blackburn and Carlos Bilbao.		   #
+  #  December 2020.						   #
+  ##################################################################
+*/
 #include "runtime_lock.h"
 #include "util.h"
 
-/* We should update this value everytime a thread is assigned to a core, but
- * unless this is implemented at CFS, it's a big overhead. For the purpose of
- * this proof of concept, we will assume a scenario where bystander threads
- * do not come and go, without losing generality.
-*/
+#define __APPLY_MAP_K__
+
+#ifdef __APPLY_MAP_K__
+#include <map>
+
+std::map<int, int> k_map;
+
+#endif
+
 static pthread_mutex_t lock;
 static pthread_mutex_t meta_lock;
 static __thread int original_priority = 0;
@@ -17,20 +28,28 @@ static time_t t;
 
 /* The K factor accounts for the number of times the high-priority thread
  * and the low-priority thread have benefited from the Priority Inversion.
- * We need to maintain a binary tree of pids-times and also apply a tunning
- * factor that can be extracted from each benchmark profiling to obtain
- * optimal performance. This can be easily obtained with a trained ML model.
+ * We need to maintain a hash map of pids-times and also apply a tunning
+ * factor initial_K, set to 10 by default.
 */
 int compute_times_factor(pid_t HP_pid)
 {
-	int ret = 0;
+	int ret = 0, initial_K = 10;
 
-#ifdef __TUNED_K__
-	//ret = TUNED_K_VALUE;
-#endif
+	/* TODO For future work we can tune the value of initial_K
+	   applying P.D.I for a particular benchmark and metrics
+	   (and other generic initial_k for any given benchmark.)
+	*/ 
 
-#ifdef __APPLY_BINARY_K__
-	// Binary Tree
+#ifdef __APPLY_MAP_K__
+	
+	if (k_map.find(HP_pid) == k_map.end()){
+		k_map[HP_pid] = 0;
+	}
+
+	ret = initial_K;
+	ret -= k_map[HP_pid]++;
+	ret = (ret > 0)? ret : 0;
+
 #endif
 	return ret;
 }
@@ -153,6 +172,11 @@ cb2_init(runtime_lock_attr *attr)
 	/* Initialize random num generator */
 	srand((unsigned) time(&t));
 
+	/* We should update this value everytime a thread is assigned to a core,
+	*  but unless this is implemented at CFS, it's a big overhead. For the 
+	*  purpose of this proof of concept, we will assume a scenario where 
+	*  bystander threads do not come and go, without losing generality.                                     
+	*/   
 	bystander_tickets_cpu = attr->by_tickets_cpu;
 	assert(bystander_tickets_cpu > 0 && "We need a positive value of tickets");
 }
