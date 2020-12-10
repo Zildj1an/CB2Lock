@@ -26,15 +26,12 @@ static void _lock(void)
 		errExit("Error getting the thread priority");
 	}
 
-tryagain:
 	/* Acquire the metadata lock then the other mutex */
 	pthread_mutex_lock(&meta_lock);
 
 	rc = pthread_mutex_trylock(&lock);
 	if (rc == 0) {
-		/* We acquired the lock. Set metadata and continue into CS */
-		owner_tid = me;
-		pthread_mutex_unlock(&meta_lock);
+		goto acquired;
 	} else if (rc == EBUSY) {
 		/* We did not acquire the lock. Update owner priority to speed things up
 		 * a bit. */
@@ -44,6 +41,8 @@ tryagain:
 			errExit("Error getting the owner priority");
 		}
 
+		/* If the priority of the owner is already high enough, then we can
+		 * just sleep on the main lock */
 		if (owner_priority < original_priority) {
 			/* Raise owner priority */
 			if (setpriority(PRIO_PROCESS, owner_tid, original_priority) == -1) {
@@ -52,14 +51,17 @@ tryagain:
 		}
 
 		pthread_mutex_unlock(&meta_lock);
-
-		/* We need to give a chance for other threads to update the owner's
-		 * priority, so we can't hold onto the metadata lock. We will just have
-		 * to try acquiring the lock again. */
-		goto tryagain;
+		pthread_mutex_lock(&lock);
+		goto acquired;
 	} else {
 		errExit("something went terribly wrong when we tried to get a lock...");
 	}
+
+acquired:
+	/* We acquired the lock. Set metadata and continue into CS */
+	pthread_mutex_lock(&meta_lock);
+	owner_tid = me;
+	pthread_mutex_unlock(&meta_lock);
 }
 
 static void _unlock(void)
