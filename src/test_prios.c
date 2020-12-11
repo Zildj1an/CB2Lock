@@ -481,7 +481,7 @@ void clean_l1_l2(void)
 		}
 	}
 
-	/* I think that in x86 DCACHE and ICACHE go together any way */
+	/* I think that in x86, DCACHE and ICACHE go together any way */
 	if (cacheflush(c,size,ICACHE | DCACHE) == -1){
 		errExit("we couldn't flush the cache(s)");
 	}
