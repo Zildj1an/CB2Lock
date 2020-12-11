@@ -30,40 +30,46 @@ disable_hyp &> /dev/null
 
 cd src
 
-# TODO:
-# add for loop for ceiling, inherit, and cb2 (normal lock is just for proving PI
-# exists
-#
-# 
-
-for m in {1..100}
+for lock in {1..3}
 do
-	for i in {1..100}
+	for m in {1..100}
 	do
-		if [[ $i -lt $LOW_THREAD ]]; then
-			continue
-		fi
+		for iterations in {1..100}
+		do
+			if [[ $i -lt $LOW_ITER ]]; then
+				continue
+			fi
 
-		# TODO: can we clear all cache???
-		# Clean everything
-		make clean &> /dev/null
-		make &> /dev/null
-		hash -r
-		sync
-		echo 3 > /proc/sys/vm/drop_caches 
+			for i in {1..100}
+			do
+				if [[ $i -lt $LOW_THREAD ]]; then
+					continue
+				fi
 
-		# Run
-		./test_prios -n $i
-		./test_prios -n $i -f
+				# Clean everything
+				make clean &> /dev/null
+				make &> /dev/null
+				hash -r
+				sync
+				echo 3 > /proc/sys/vm/drop_caches 
+
+				# Run
+				./test_prios -n $i -p $lock -i $iterations
 	
-		if [[ $i -eq $HIGH_THREAD ]]; then
+				if [[ $i -eq $HIGH_THREAD ]]; then
+					break
+				fi
+			done
+
+			if [[ $i -eq $HIGH_ITER ]]; then
+				break
+			fi
+		done
+
+		if [[ $m -eq $TIMES ]]; then
 			break
 		fi
+
+		echo "-----------------------------------------------"
 	done
-
-	if [[ $m -eq $ITERATIONS ]]; then
-		break
-	fi
-
-	echo "-----------------------------------------------"
 done

@@ -4,10 +4,10 @@ The CB2Lock: A more fair approach to handle Priority Inversion for an efficient 
 
 ## Evaluation
 
-To run the experiments n times from x to y threads do as superuser:
+To run the experiments n times, from x to y threads, from a to b iterations each, do as superuser:
 
 ```
-# ITERATIONS=n LOW_THREAD=x HIGH_THREAD=y ./bench.sh | tee -a log_file
+# TIMES=n LOW_THREAD=x HIGH_THREAD=y LOW_ITER=a HIGH_ITER=b ./bench.sh | tee -a log_file
 ```
 
 ## Authors
