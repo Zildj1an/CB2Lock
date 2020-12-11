@@ -32,7 +32,7 @@ static time_t t;
 */
 int compute_times_factor(pid_t HP_pid)
 {
-	int ret = 0, initial_K = 10;
+	int ret = 0, initial_K = bystander_tickets_cpu;
 
 	/* TODO For future work we can tune the value of initial_K
 	   applying P.D.I for a particular benchmark and metrics
@@ -45,6 +45,7 @@ int compute_times_factor(pid_t HP_pid)
 	ret = initial_K;
 	ret -= get_and_increase(HP_pid);
 	ret = (ret > 0)? ret : 0;
+	if (ret) printf("K of thread = %d\n",ret);
 
 #endif
 	return ret;

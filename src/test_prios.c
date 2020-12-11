@@ -234,10 +234,13 @@ out:
 	return (void*)tr;
 }
 
+void clean_l1_l2(void);
+
 int main(int argc, char *argv[])
 {
-	// TODO:
-	/* mmap to change VM region, them madvise to get rid of us for clear cache */
+	/* Create a new mapping in the virtual address space for this process */
+	void *addr = mmap(NULL,sysconf(_SC_PAGE_SIZE), PROT_READ | PROT_WRITE, 
+		MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 
 	int opt, ncpu = get_nprocs(), thread_count = 3, flags = 0, is_cb2 = 0,
 		iter = 1;
@@ -380,13 +383,13 @@ int main(int argc, char *argv[])
 			
 			/* Get values between -1 and -19 */ 
 			if (tr->priority > 18){
+			        sum_bys += tr->priority;
 				tr->priority = 0 - tr->priority + 18 ;
 			}
-
-			if (is_cb2){
+			else if (is_cb2){
 				sum_bys += tr->priority;
 			}
-			
+
 			tr->pinning = rand() % 1;
 		}
 
@@ -406,7 +409,6 @@ int main(int argc, char *argv[])
 			errExit("Could not create thread");
 		}
 	}
-
 
 	/* ############ Join and process results ########################### */
 
@@ -457,9 +459,32 @@ int main(int argc, char *argv[])
 	pthread_attr_destroy(&thread_attr);
 	free(collection_tr);
 
-	// See https://stackoverflow.com/questions/48527189/is-there-a-way-to-flush-the-entire-cpu-cache-related-to-a-program?noredirect=1&lq=1
-	// Clear all cache contents
-	//__builtin__clear_cache
+	/* Some stuff to make the experiments more reliable */
+
+	clean_l1_l2();
+
+	if (madvise(addr,sysconf(_SC_PAGE_SIZE),MADV_DONTNEED)){
+		errExit("we couldn't do madvise");	
+	}
 
 	exit(EXIT_SUCCESS);
+}
+
+void clean_l1_l2(void)
+{
+	const int size = 40*1024*1024; /*  40 MB!! */
+	char *c = (char *)malloc(size);
+
+	for (int i = 0; i < 0xffff; i++){
+		for (int j = 0; j < size; j++){
+         		c[j] = i*j;	
+		}
+	}
+
+	/* I think that in x86 DCACHE and ICACHE go together any way */
+	if (cacheflush(c,size,ICACHE | DCACHE) == -1){
+		errExit("we couldn't flush the cache(s)");
+	}
+	
+	free(c);
 }

@@ -13,6 +13,9 @@
 #include <errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
+#include <sys/mman.h>
+
+#include <asm/cachectl.h>
 
 #define gettid() syscall(SYS_gettid)
 
