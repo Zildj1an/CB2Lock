@@ -20,6 +20,7 @@
 /* Control for forcing the scenario we want */
 pthread_barrier_t barrier;
 static volatile int lowest_acquired = 0;
+static volatile int highest_acquired = 0;
 static volatile int done = 0;
 
 /* Our lock, that will be of the type specified at runtime */
@@ -187,6 +188,8 @@ void *thread_func(void *vargp)
 
 		if (tr->id == LOW_PRIO_CPU) {
 			lowest_acquired = 1;
+		} else {
+			highest_acquired = 1;
 		}
 		
 		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
@@ -194,8 +197,7 @@ void *thread_func(void *vargp)
 		/* #####################  CRITICAL SECTION ################# */
 
 		/* Let's make the time gap more obvious */
-		m = BILLION;
-		for (s = 0; s < m; s++){
+		for (s = 0; s < BILLION; s++){
 			asm(""); /* Avoids GCC optimizations */
 		}
 
@@ -205,8 +207,6 @@ void *thread_func(void *vargp)
 			if (setpriority(PRIO_PROCESS, tr->tid, HIGHEST_PRIO) == -1) {
 				errExit("Error setting the thread priority");
 			}
-		
-			lowest_acquired = 0;
 		}
 
 		if (i + 1 == tr->iter) {
@@ -214,6 +214,13 @@ void *thread_func(void *vargp)
 		}
 
 		our_lock->unlock();
+
+		/* Enforce ordering */
+		if (tr->id) {
+			lowest_acquired = 0;
+		} else {
+			highest_acquired = 0;
+		}
 
 		LOG_DEBUG("I (%d) have released the lock\n", tr->id);
 

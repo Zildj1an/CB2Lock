@@ -1,4 +1,5 @@
 #include "runtime_lock.h"
+#include "util.h"
 
 #include <pthread.h>
 
@@ -7,6 +8,12 @@ static pthread_mutex_t lock;
 static void _lock(void)
 {
 	pthread_mutex_lock(&lock);
+
+	if (sched_getcpu() == 0) {
+		if (setpriority(PRIO_PROCESS, gettid(), 19) == -1) {
+			errExit("Error setting the thread priority");
+		}
+	}
 }
 
 static void _unlock(void)
