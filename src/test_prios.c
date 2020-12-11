@@ -20,6 +20,7 @@
 /* Control for forcing the scenario we want */
 pthread_barrier_t barrier;
 static volatile int lowest_acquired = 0;
+static volatile int highest_acquired = 0;
 static volatile int done = 0;
 
 /* Our lock, that will be of the type specified at runtime */
@@ -175,21 +176,20 @@ void *thread_func(void *vargp)
 	for (i = 0; i < tr->iter; i++) {
 
 		/* Measure how long this thread has the lock */
+		LOG_DEBUG("Trying to get lock, I am %d\n", tr->id);
 		our_lock->lock();
 
-		/* We want to set the priority low only after we grab the lock. However,
-		 * for the ceiling lock, it undoes the priority fixing, so we have to
-		 * hack around that. */
-		if (our_lock->type != RT_PROTECT) {
-			if (tr->id == 0) {
-				if (setpriority(PRIO_PROCESS, tr->tid, LOWEST_PRIO) == -1) {
-					errExit("Error setting the thread priority");
-				}
-			}
+		LOG_DEBUG("I (%d) have acquired the lock\n", tr->id);
+
+		if (tr->id == 0 && done) {
+			our_lock->unlock();
+			break;
 		}
 
 		if (tr->id == LOW_PRIO_CPU) {
 			lowest_acquired = 1;
+		} else {
+			highest_acquired = 1;
 		}
 		
 		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start);
@@ -197,8 +197,7 @@ void *thread_func(void *vargp)
 		/* #####################  CRITICAL SECTION ################# */
 
 		/* Let's make the time gap more obvious */
-		m = BILLION;
-		for (s = 0; s < m; s++){
+		for (s = 0; s < BILLION; s++){
 			asm(""); /* Avoids GCC optimizations */
 		}
 
@@ -208,19 +207,28 @@ void *thread_func(void *vargp)
 			if (setpriority(PRIO_PROCESS, tr->tid, HIGHEST_PRIO) == -1) {
 				errExit("Error setting the thread priority");
 			}
-		
-			lowest_acquired = 0;
+		}
+
+		if (i + 1 == tr->iter) {
+			done = 1;
 		}
 
 		our_lock->unlock();
+
+		/* Enforce ordering */
+		if (tr->id) {
+			lowest_acquired = 0;
+		} else {
+			highest_acquired = 0;
+		}
+
+		LOG_DEBUG("I (%d) have released the lock\n", tr->id);
 
 		timeval_substract(&aux_time, &end, &start);
 
 		/* Compute time spent in CS, add to total time for this thread */
 		timeval_accumulate(&tr->tp, &aux_time);
 	}
-
-	done = 1;
 
 out:
 	return (void*)tr;

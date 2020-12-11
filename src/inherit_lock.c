@@ -34,6 +34,13 @@ static void _lock(void)
 	if (rc == 0) {
 		/* We acquired the lock. Set metadata and continue into CS */
 		owner_tid = me;
+
+		if (sched_getcpu() == 0) {
+			if (setpriority(PRIO_PROCESS, me, 19) == -1) {
+				errExit("Error setting the thread priority");
+			}
+		}
+
 		pthread_mutex_unlock(&meta_lock);
 	} 
 	else if (rc == EBUSY) {
@@ -42,13 +49,13 @@ static void _lock(void)
 		assert(owner_tid != -1);
 		owner_priority = getpriority(PRIO_PROCESS, owner_tid);
 	
-		if (original_priority == -1) {
+		if (owner_priority == -1) {
 			errExit("Error getting the owner priority");
 		}
 
 		/* If the priority of the owner is already high enough, then we can
 		 * just sleep on the main lock */
-		if (owner_priority < original_priority) {
+		if (owner_priority > original_priority) {
 			/* Raise owner priority */
 			if (setpriority(PRIO_PROCESS, owner_tid, original_priority) == -1) {
 				errExit("Error setting the owner priority");
@@ -62,6 +69,12 @@ static void _lock(void)
 		/* Reacquire the metadata lock, fix metadata, then enter CS */
 		pthread_mutex_lock(&meta_lock);
 		owner_tid = me;
+
+		if (sched_getcpu() == 0) {
+			if (setpriority(PRIO_PROCESS, me, 19) == -1) {
+				errExit("Error setting the thread priority");
+			}
+		}
 		pthread_mutex_unlock(&meta_lock);
 	} 
 	else {
