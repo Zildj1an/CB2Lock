@@ -8,7 +8,7 @@
 #include "runtime_lock.h"
 #include "util.h"
 
-//#define __APPLY_MAP_K__
+#define __APPLY_MAP_K__
 
 #ifdef __APPLY_MAP_K__
 #include "map.h"
