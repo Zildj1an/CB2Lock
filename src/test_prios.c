@@ -175,17 +175,14 @@ void *thread_func(void *vargp)
 	for (i = 0; i < tr->iter; i++) {
 
 		/* Measure how long this thread has the lock */
+		LOG_DEBUG("Trying to get lock, I am %d\n", tr->id);
 		our_lock->lock();
 
-		/* We want to set the priority low only after we grab the lock. However,
-		 * for the ceiling lock, it undoes the priority fixing, so we have to
-		 * hack around that. */
-		if (our_lock->type != RT_PROTECT) {
-			if (tr->id == 0) {
-				if (setpriority(PRIO_PROCESS, tr->tid, LOWEST_PRIO) == -1) {
-					errExit("Error setting the thread priority");
-				}
-			}
+		LOG_DEBUG("I (%d) have acquired the lock\n", tr->id);
+
+		if (tr->id == 0 && done) {
+			our_lock->unlock();
+			break;
 		}
 
 		if (tr->id == LOW_PRIO_CPU) {
@@ -212,15 +209,19 @@ void *thread_func(void *vargp)
 			lowest_acquired = 0;
 		}
 
+		if (i + 1 == tr->iter) {
+			done = 1;
+		}
+
 		our_lock->unlock();
+
+		LOG_DEBUG("I (%d) have released the lock\n", tr->id);
 
 		timeval_substract(&aux_time, &end, &start);
 
 		/* Compute time spent in CS, add to total time for this thread */
 		timeval_accumulate(&tr->tp, &aux_time);
 	}
-
-	done = 1;
 
 out:
 	return (void*)tr;

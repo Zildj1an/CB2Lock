@@ -97,6 +97,14 @@ try_again:
 	if (rc == 0) {
 		/* We acquired the lock. Set metadata and continue into CS */
 		owner_tid = me;
+		LOG_DEBUG("got it %d\n", me);
+
+		if (sched_getcpu() == 0) {
+			if (setpriority(PRIO_PROCESS, me, 19) == -1) {
+				errExit("Error setting the thread priority");
+			}
+		}
+
 		pthread_mutex_unlock(&meta_lock);
 	} 
 	else if (rc == EBUSY) {
@@ -105,17 +113,19 @@ try_again:
 
 		assert(owner_tid != -1);
 		owner_priority = getpriority(PRIO_PROCESS, owner_tid);
-	
-		if (original_priority == -1) {
+		if (owner_priority == -1) {
 			errExit("Error getting the owner priority");
 		}
 
 		/* If the priority of the owner is already high enough, then we can
 		 * just sleep on the main lock */
-		if (owner_priority < original_priority) {
+		LOG_DEBUG("owner %d\tme %d\n", owner_priority, original_priority);
+		if (owner_priority > original_priority) {
+			LOG_DEBUG("time to beef up the owner %d\n", me);
 
 			/* Can we update his priority? */
 			if (cb2_lock_inversion(original_priority,me)){
+				LOG_DEBUG("HEY, in lock inversion %d\n", me);
 
 				/* Raise owner priority */
 				if (setpriority(PRIO_PROCESS, owner_tid, 
@@ -129,11 +139,19 @@ try_again:
 
 		/* Now, we can wait for the main lock */
 		pthread_mutex_unlock(&meta_lock);
+
+		LOG_DEBUG("now we wait... %d\n", me);
 		pthread_mutex_lock(&lock);
 
 		/* Reacquire the metadata lock, fix metadata, then enter CS */
 		pthread_mutex_lock(&meta_lock);
 		owner_tid = me;
+
+		if (sched_getcpu() == 0) {
+			if (setpriority(PRIO_PROCESS, me, 19) == -1) {
+				errExit("Error setting the thread priority");
+			}
+		}
 		pthread_mutex_unlock(&meta_lock);
 	} 
 	else {
