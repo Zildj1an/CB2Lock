@@ -45,7 +45,6 @@ int compute_times_factor(pid_t HP_pid)
 	ret = initial_K;
 	ret -= get_and_increase(HP_pid);
 	ret = (ret > 0)? ret : 0;
-	if (ret) printf("K of thread = %d\n",ret);
 
 #endif
 	return ret;
