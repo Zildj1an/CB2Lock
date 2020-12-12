@@ -1,0 +1,16 @@
+
+Experiment with lock normal pthread mutex
+3 threads and 1 iterations, thread zero has the lowest priority.
+Thread: 0	Prio:  19	CPU#: 0	CPU time: 1:765101664	CPU%:  37	Iters: 1
+Thread: 1	Prio: -20	CPU#: 1	CPU time: 1:754543342	CPU%:  37	Iters: 1
+Thread: 2	Prio:  17	CPU#: 0	CPU time: 1:196511002	CPU%:  25	Iters: 614114
+Total benchmark time: 4:828280013
+Total threads CPU time: 4:716156008
+
+Experiment with lock normal pthread mutex
+3 threads and 5 iterations, thread zero has the lowest priority.
+Thread: 0	Prio:  19	CPU#: 0	CPU time: 8:842866400	CPU%:  34	Iters: 5
+Thread: 1	Prio: -20	CPU#: 1	CPU time: 8:770228044	CPU%:  34	Iters: 5
+Thread: 2	Prio:  -1	CPU#: 0	CPU time: 8:040647869	CPU%:  31	Iters: 4114116
+Total benchmark time: 26:404774401
+Total threads CPU time: 25:653742313
