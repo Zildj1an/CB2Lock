@@ -15,8 +15,6 @@
 #include <linux/kernel.h>
 #include <sys/mman.h>
 
-#include <asm/cachectl.h>
-
 #define gettid() syscall(SYS_gettid)
 
 #define errExit(msg) do { perror(msg); exit(EXIT_FAILURE); } while (0)
