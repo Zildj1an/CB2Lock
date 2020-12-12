@@ -23,7 +23,7 @@ function disable_hyp {
 }
 
 # sudo apt install cowsay figlet toilet
-#cowsay -f tux 'CB2Lock microbenchmark '$(date +"%x %r") | toilet --metal -f term 
+cowsay -f tux 'CB2Lock microbenchmark '$(date +"%x %r") | toilet --metal -f term 
 
 # Disable hyperthreading
 #disable_hyp &> /dev/null
