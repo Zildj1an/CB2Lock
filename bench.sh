@@ -26,7 +26,7 @@ function disable_hyp {
 #cowsay -f tux 'CB2Lock microbenchmark '$(date +"%x %r") | toilet --metal -f term 
 
 # Disable hyperthreading
-disable_hyp &> /dev/null
+#disable_hyp &> /dev/null
 
 if [ $# -eq 1 ]; then
 	if test -f $1; then

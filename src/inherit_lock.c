@@ -31,6 +31,7 @@ static void _lock(void)
 	pthread_mutex_lock(&meta_lock);
 
 	rc = pthread_mutex_trylock(&lock);
+
 	if (rc == 0) {
 		/* We acquired the lock. Set metadata and continue into CS */
 		owner_tid = me;
