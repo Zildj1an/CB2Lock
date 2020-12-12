@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-lpthread -I. -D_GNU_SOURCE -g
+CFLAGS=-lpthread -I. -D_GNU_SOURCE -g #-D__APPLY_MAP_K__
 
 all:
 	g++ -c map.cpp -o map.o

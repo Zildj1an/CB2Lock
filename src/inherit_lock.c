@@ -14,7 +14,7 @@ static pthread_mutex_t lock;
 static pthread_mutex_t meta_lock;
 static __thread int original_priority = 0;
 
-static volatile pid_t owner_tid = 0;
+static volatile pid_t owner_tid = -1;
 
 static void _lock(void)
 {
@@ -47,9 +47,10 @@ static void _lock(void)
 	else if (rc == EBUSY) {
 		/* We did not acquire the lock. Update owner priority to speed things up
 		 * a bit. */
+		LOG_DEBUG("Owner is %d\n", owner_tid);
 		assert(owner_tid != -1);
 		owner_priority = getpriority(PRIO_PROCESS, owner_tid);
-	
+
 		if (owner_priority == -1) {
 			errExit("Error getting the owner priority");
 		}

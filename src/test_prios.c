@@ -98,6 +98,7 @@ int init_lock(int lock_proto, int sum_bys)
 	case RT_CB2:
 		our_lock = &CB2_lock;
 		attr.by_tickets_cpu = sum_bys;
+		break;
 	default:
 		/* unknown protocol */
 		return -1;
@@ -402,7 +403,7 @@ int main(int argc, char *argv[])
 
 		/* init the lock before the threads go off and party */
 		if (is_cb2 && i == thread_count - 1) {
-			init_lock(RT_CB2,sum_bys);
+			init_lock(RT_CB2, sum_bys);
 		}
 
 		if (pthread_create(&threads[i], &thread_attr, thread_func, tr) != 0) {

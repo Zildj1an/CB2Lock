@@ -8,8 +8,6 @@
 #include "runtime_lock.h"
 #include "util.h"
 
-#define __APPLY_MAP_K__
-
 #ifdef __APPLY_MAP_K__
 #include "map.h"
 #endif
@@ -32,19 +30,20 @@ static time_t t;
 */
 int compute_times_factor(pid_t HP_pid)
 {
-	int ret = 0, initial_K = bystander_tickets_cpu;
+	int ret, initial_K = ret = bystander_tickets_cpu;
 
 	/* TODO For future work we can tune the value of initial_K
-	   applying P.D.I for a particular benchmark and metrics
+	   applying P.I.D for a particular benchmark and metrics
 	   (and other generic initial_k for any given benchmark.)
 	*/ 
 
 #ifdef __APPLY_MAP_K__
-	
 	insert_if_new(HP_pid);
 	ret = initial_K;
 	ret -= get_and_increase(HP_pid);
 	ret = (ret > 0)? ret : 0;
+
+	if (ret != 0) LOG_DEBUG("Ret is %d\n", ret);
 
 #endif
 	return ret;
