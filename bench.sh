@@ -23,18 +23,18 @@ function disable_hyp {
 }
 
 # sudo apt install cowsay figlet toilet
-cowsay -f tux 'CB2Lock microbenchmark '$(date +"%x %r") | toilet --metal -f term 
+#cowsay -f tux 'CB2Lock microbenchmark '$(date +"%x %r") | toilet --metal -f term 
 
 # Disable hyperthreading
-#disable_hyp &> /dev/null
+disable_hyp &> /dev/null
 
 if [ $# -eq 1 ]; then
 	if test -f $1; then
    		echo "Parsing configuration file..."
-		echo $1
+		source $1
 	fi
 fi
-
+ 
 cd src
 
 for lock in {1..3}
@@ -43,7 +43,7 @@ do
 	do
 		for iterations in {1..100}
 		do
-			if [[ $i -lt $LOW_ITER ]]; then
+			if [[ $iterations -lt $LOW_ITER ]]; then
 				continue
 			fi
 
@@ -68,7 +68,7 @@ do
 				fi
 			done
 
-			if [[ $i -eq $HIGH_ITER ]]; then
+			if [[ $iterations -eq $HIGH_ITER ]]; then
 				break
 			fi
 		done

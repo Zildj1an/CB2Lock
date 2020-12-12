@@ -432,7 +432,7 @@ int main(int argc, char *argv[])
 
 		tr = collection_tr[i];
 
-		printf("Thread: %d\tPrio: %3d\tCPU#: %d\tCPU time: %d:%09d\tCPU%: %3d\tIters: %d\n",
+		printf("Thread: %d\tPrio: %3d\tCPU#: %d\tCPU time: %ld:%09ld\tCPU%: %3d\tIters: %d\n",
 				i, (i == 0) ? LOWEST_PRIO : tr->priority, tr->pinning,
 				tr->tp.tv_sec, tr->tp.tv_nsec, compute_percentage(tr,total),
 				tr->iter);
@@ -446,10 +446,10 @@ int main(int argc, char *argv[])
 	
 	timeval_substract(&bench_time, &end_bench, &start_bench);
 
-	printf("Total benchmark time: %d:%09d\n",
+	printf("Total benchmark time: %lld:%09ld\n",
 		(long long)bench_time.tv_sec,bench_time.tv_nsec);
 
-	printf("Total threads CPU time: %d:%09d\n",
+	printf("Total threads CPU time: %lld:%09ld\n",
 		(long long)total_time.tv_sec,total_time.tv_nsec);
 	
 	/* Cleanup */
@@ -461,7 +461,7 @@ int main(int argc, char *argv[])
 
 	/* Some stuff to make the experiments more reliable */
 
-	clean_l1_l2();
+	//clean_l1_l2();
 
 	if (madvise(addr,sysconf(_SC_PAGE_SIZE),MADV_DONTNEED)){
 		errExit("we couldn't do madvise");	
