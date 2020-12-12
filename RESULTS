@@ -1,0 +1,34 @@
+-------------------
+### SLOWDOWN ######
+-------------------
+
+Slowdown_by(mutex) = CPU_percentage_by(mutex) / CPU_percentage_by(normal) =
+		   = 97/25
+		   = 3.88
+
+Slowdown_HP(mutex) = 1/37  = 0.02702703
+Slowdown_LP(mutex) = 1/37  = 0.02702703 
+
+Slowdown_by(ceiling) = 1/25  = 0.04  
+Slowdown_HP(ceiling) = 50/37 = 1.35
+Slowdown_LP(ceiling) = 49/37 = 1.32
+
+Slowdown_by(inherit) = 3/25  = 0.12   
+Slowdown_HP(inherit) = 48/37 = 1.2972
+Slowdown_LP(inherit) = 48/37 = 1.2972
+
+Slowdown_by(CB2) = 15/25 = 0.6   
+Slowdown_HP(CB2) = 42/37 = 1.13513
+Slowdown_LP(CB2) = 42/37 = 1.13513
+
+---------------------
+### UNFAIRNESS ######
+---------------------
+
+Unfairness(ceiling) = MAX(Slowdowns)/MIN(Slowdowns) = 1.35/0.04 = 33.75
+Unfairness(inherit) = 1.2972/0.12 = 10.81
+Unfairness(CB2) = 1.13513/0.6 = 1.89
+
+Even without tuning, CB2Lock is x5 times more fair than PI (even w/o tuning) and x33.75 
+more fair than Ceiling. The progress among threads is extremely unbalanced without 
+CB2Lock.
