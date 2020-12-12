@@ -30,7 +30,7 @@ static time_t t;
 */
 int compute_times_factor(pid_t HP_pid)
 {
-	int ret, initial_K = ret = bystander_tickets_cpu;
+	int ret, initial_K = ret = 0;
 
 	/* TODO For future work we can tune the value of initial_K
 	   applying P.I.D for a particular benchmark and metrics

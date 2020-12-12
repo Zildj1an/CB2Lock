@@ -1,0 +1,8 @@
+
+Experiment with lock inherit PI
+3 threads and 1 iterations, thread zero has the lowest priority.
+Thread: 0	Prio:  19	CPU#: 0	CPU time: 1:771979412	CPU%:  48	Iters: 1
+Thread: 1	Prio: -20	CPU#: 1	CPU time: 1:759261328	CPU%:  48	Iters: 1
+Thread: 2	Prio: -10	CPU#: 0	CPU time: 0:109851397	CPU%:   3	Iters: 55947
+Total benchmark time: 3:651837752
+Total threads CPU time: 3:641092137

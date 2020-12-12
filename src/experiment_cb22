@@ -1,0 +1,9 @@
+k = 0
+
+Experiment with lock CB2Lock
+3 threads and 1 iterations, thread zero has the lowest priority.
+Thread: 0	Prio:  19	CPU#: 0	CPU time: 1:875264474	CPU%:  16	Iters: 1
+Thread: 1	Prio: -20	CPU#: 1	CPU time: 1:754872083	CPU%:  15	Iters: 1
+Thread: 2	Prio:  12	CPU#: 0	CPU time: 7:853413594	CPU%:  68	Iters: 3692070
+Total benchmark time: 23:005133028
+Total threads CPU time: 11:483550151

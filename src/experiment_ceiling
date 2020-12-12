@@ -1,0 +1,8 @@
+
+Experiment with lock ceiling PI
+3 threads and 1 iterations, thread zero has the lowest priority.
+Thread: 0	Prio:  19	CPU#: 0	CPU time: 1:775964101	CPU%:  50	Iters: 1
+Thread: 1	Prio: -20	CPU#: 1	CPU time: 1:756083135	CPU%:  49	Iters: 1
+Thread: 2	Prio:  12	CPU#: 0	CPU time: 0:001794176	CPU%:   0	Iters: 919
+Total benchmark time: 3:534622219
+Total threads CPU time: 3:533841412
