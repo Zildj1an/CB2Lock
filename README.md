@@ -1,6 +1,6 @@
 # The CB2Lock
 
-The CB2Lock: A fair approach to handle Priority Inversion for an efficient serialization in Linux.
+The CB2 protocol: A fair approach to handle Priority Inversion for an efficient serialization in Linux.
 
 ## Evaluation
 
