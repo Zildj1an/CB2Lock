@@ -29,6 +29,6 @@ Unfairness(ceiling) = MAX(Slowdowns)/MIN(Slowdowns) = 1.35/0.04 = 33.75
 Unfairness(inherit) = 1.2972/0.12 = 10.81
 Unfairness(CB2) = 1.13513/0.6 = 1.89
 
-Even without tuning, CB2Lock is x5 times more fair than PI (even w/o tuning) and x33.75 
-more fair than Ceiling. The progress among threads is extremely unbalanced without 
+Even without tuning, CB2Lock is x5 times more fair than PI (even w/o tuning) and x17 
+times more fair than Ceiling. The progress among threads is extremely unbalanced without 
 CB2Lock.
